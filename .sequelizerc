@@ -1,0 +1,12 @@
+require("@babel/register")
+
+const path = require("path")
+
+const root = process.cwd()
+
+module.exports = {
+    config: path.join(root, "sequelize", "config.js"),
+    "models-path": path.join(root, "src", "models"),
+    "migrations-path": path.join(root, "sequelize", "migrations"),
+    "seeders-path": path.join(root, "sequelize", "seeders")
+}
