@@ -1,13 +1,16 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import http from "http";
 import expressWinston from "express-winston";
 import cors from "cors";
-import { Routes } from "@/interfaces/general/route.interface";
+import { Routes } from "@/types/general/route.interface";
 import { NODE_ENV, PORT } from "@/config";
 import logger from "@/utils/logger";
 import db from "@/models";
 import RedisClient from "@/config/Redis";
 import SocketServer from "@/config/Socket";
+import PassportConfig from "@/config/Passport";
+import AppError from "@/utils/appError";
+import { sendResponse } from "@/utils";
 
 class App {
     public app: express.Application;
@@ -22,11 +25,14 @@ class App {
         this.initializeMiddleware();
         this.initializeRoutes(routes);
         this.createServer();
+        this.app.use(new PassportConfig().initialize())
         this.app.use(
             expressWinston.errorLogger({
                 winstonInstance: logger,
             }),
         );
+
+        this.initializeErrorHandling()
     }
 
     public listen = async () => {
@@ -81,8 +87,9 @@ class App {
             this.app.use("/", route.router);
         });
 
-        this.app.use((req: Request, res: Response) => {
-            res.status(404).json({ message: "Route not found" });
+        // 404 handler — unknown routes
+        this.app.use((req: Request, res: Response, next: NextFunction) => {
+            next(new AppError(`Route ${req.method} ${req.originalUrl} not found`, 404));
         });
 
         this.app.use((err: any, req: Request, res: Response) => {
@@ -111,6 +118,47 @@ class App {
         const redis = RedisClient.getInstance();
         await redis.connect();
     }
+
+    private initializeErrorHandling = () => {
+        // ✅ 4 params — Express recognizes this as error middleware
+        this.app.use((err: any, req: Request, res: Response) => {
+
+            // Known operational error (thrown intentionally)
+            if (err instanceof AppError) {
+                return res.status(err.statusCode).json({
+                    status: "error",
+                    message: err.message,
+                });
+            }
+
+            // Sequelize validation error
+            if (err.name === "SequelizeValidationError" || err.name === "SequelizeUniqueConstraintError") {
+                return res.status(400).json({
+                    status: "error",
+                    message: err.errors?.[0]?.message || "Validation error",
+                });
+            }
+
+            // JWT errors
+            if (err.name === "JsonWebTokenError") {
+                return res.status(401).json({
+                    status: "error",
+                    message: "Invalid token",
+                });
+            }
+
+            if (err.name === "TokenExpiredError") {
+                return res.status(401).json({
+                    status: "error",
+                    message: "Token expired",
+                });
+            }
+
+            // Unknown/unexpected error — log it, don't expose details
+            logger.error(err);
+            return sendResponse({ res, statusCode: 500, success: false, message: this.env === "development" ? err.message : "Internal server error" })
+        });
+    };
 }
 
 export default App;
