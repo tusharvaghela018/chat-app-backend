@@ -79,7 +79,7 @@ class App {
     };
 
     private initializeRoutes = (routes: Routes[]) => {
-        this.app.get("/", (req: Request, res: Response) => {
+        this.app.get("/", (_, res: Response) => {
             res.status(200).json("Server is running");
         });
 
@@ -91,17 +91,13 @@ class App {
         this.app.use((req: Request, res: Response, next: NextFunction) => {
             next(new AppError(`Route ${req.method} ${req.originalUrl} not found`, 404));
         });
-
-        this.app.use((err: any, req: Request, res: Response) => {
-            logger.error(err);
-            res.status(500).json({ message: "Internal server Error !" });
-        });
     };
 
     private createServer = () => {
         this.server = http.createServer(this.app);
 
         const socketServer = SocketServer.getInstance()
+        //Initialize base socket first
         socketServer.initialize(this.server);
     };
 
@@ -120,43 +116,80 @@ class App {
     }
 
     private initializeErrorHandling = () => {
-        // ✅ 4 params — Express recognizes this as error middleware
-        this.app.use((err: any, req: Request, res: Response) => {
+        this.app.use((err: any, _: Request, res: Response) => {
 
-            // Known operational error (thrown intentionally)
+            // 🔹 AppError (custom errors)
             if (err instanceof AppError) {
-                return res.status(err.statusCode).json({
-                    status: "error",
+                return sendResponse({
+                    res,
+                    statusCode: err.statusCode,
+                    success: false,
                     message: err.message,
+                    error: err.errors || null, // 👈 support detailed errors
+                    show_toast: true
                 });
             }
 
-            // Sequelize validation error
-            if (err.name === "SequelizeValidationError" || err.name === "SequelizeUniqueConstraintError") {
-                return res.status(400).json({
-                    status: "error",
-                    message: err.errors?.[0]?.message || "Validation error",
+            // 🔹 Sequelize Errors
+            if (
+                err.name === "SequelizeValidationError" ||
+                err.name === "SequelizeUniqueConstraintError"
+            ) {
+                const errors = err.errors?.map((e: any) => ({
+                    field: e.path,
+                    message: e.message
+                }));
+
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: errors?.[0]?.message || "Validation error",
+                    error: errors || null,
+                    show_toast: true
                 });
             }
 
-            // JWT errors
+            // 🔹 JWT Errors
             if (err.name === "JsonWebTokenError") {
-                return res.status(401).json({
-                    status: "error",
+                return sendResponse({
+                    res,
+                    statusCode: 401,
+                    success: false,
                     message: "Invalid token",
+                    error: null,
+                    show_toast: true
                 });
             }
 
             if (err.name === "TokenExpiredError") {
-                return res.status(401).json({
-                    status: "error",
+                return sendResponse({
+                    res,
+                    statusCode: 401,
+                    success: false,
                     message: "Token expired",
+                    error: null,
+                    show_toast: true
                 });
             }
 
-            // Unknown/unexpected error — log it, don't expose details
+            // 🔹 Unknown / Server Error
             logger.error(err);
-            return sendResponse({ res, statusCode: 500, success: false, message: this.env === "development" ? err.message : "Internal server error" })
+
+            return sendResponse({
+                res,
+                statusCode: 500,
+                success: false,
+                message:
+                    this.env === "development"
+                        ? err.message
+                        : "Internal server error",
+                error:
+                    this.env === "development"
+                        ? err.stack // 👈 show stack in dev
+                        : null,
+                show_toast: true
+            });
         });
     };
 }

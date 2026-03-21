@@ -4,6 +4,8 @@ import User from "@/models/user.model";
 import BaseRepository from "@/repositories";
 import jwtUtil from "@/utils/jwt.util";
 import { Profile } from "passport-google-oauth20";
+import { Op } from "sequelize";
+import AppError from "@/utils/appError";
 
 class UserRepository extends BaseRepository<User> {
     constructor() {
@@ -14,7 +16,7 @@ class UserRepository extends BaseRepository<User> {
     readonly googleLogin = async (profile: Profile): Promise<{ user: Partial<User> }> => {
         const email = profile.emails?.[0]?.value;
 
-        if (!email) throw new Error("Google account has no email address");
+        if (!email) throw new AppError("Google account has no email address");
 
         let user = await this.findOne({ where: { email } });
 
@@ -29,7 +31,7 @@ class UserRepository extends BaseRepository<User> {
             await user.update({ google_id: profile.id });
         }
 
-        return { user };
+        return { user: this.sanitize(user) };
     };
 
     // ─── Local Login ──────────────────────────────────────────────────
@@ -38,23 +40,23 @@ class UserRepository extends BaseRepository<User> {
         const user = await this.findOne({ where: { email: email } });
 
         if (!user) {
-            throw new Error("Invalid email or password");
+            throw new AppError("Invalid email or password", 401);
         }
 
         if (!user.password) {
             // Account exists but was created via Google — no password set
-            throw new Error("This account uses Google Sign-In. Please login with Google");
+            throw new AppError("This account uses Google Sign-In. Please login with Google");
         }
 
         const isMatch = await user.comparePassword(password);
 
         if (!isMatch) {
-            throw new Error("Invalid email or password");
+            throw new AppError("Invalid email or password", 401);
         }
 
         const token = jwtUtil.sign({ id: user.id, email: user.email });
 
-        return { user, token };
+        return { user: this.sanitize(user), token };
     };
 
     // ─── Register ─────────────────────────────────────────────────────
@@ -63,7 +65,7 @@ class UserRepository extends BaseRepository<User> {
         const existing = await this.findOne({ where: { email: email } });
 
         if (existing) {
-            throw new Error("Email is already registered");
+            throw new AppError("Email is already registered");
         }
 
         const user = await this.create({
@@ -82,6 +84,15 @@ class UserRepository extends BaseRepository<User> {
         const userJson = user.toJSON() as any;
         delete userJson.password;
         return userJson;
+    }
+
+    readonly getUserList = async (userId: number) => {
+        return await this.findAll({
+            where: {
+                id: { [Op.ne]: userId }
+            },
+            attributes: ['id', 'name', 'avatar', 'is_online', 'email']
+        })
     }
 }
 

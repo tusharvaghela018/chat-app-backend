@@ -48,8 +48,9 @@ class PassportConfig {
                 try {
                     const { user } = await this.userRepo.googleLogin(profile)
                     return done(null, user);
-                } catch (error) {
-                    return done(error, false)
+                }
+                catch (error) {
+                    return done(null, false, { message: error?.message })
                 }
             }
         ))

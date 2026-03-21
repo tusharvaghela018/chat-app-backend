@@ -23,6 +23,7 @@
     "express": "^5.2.1",
     "express-winston": "^4.2.0",
     "http": "^0.0.1-security",
+    "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
