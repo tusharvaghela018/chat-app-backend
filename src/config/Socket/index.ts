@@ -1,3 +1,4 @@
+import { CHAT_EVENTS } from "@/constants/socket.constants";
 import User from "@/models/user.model";
 import ConversationRepository from "@/repositories/conversation.repository";
 import MessageRepository from "@/repositories/message.repository";
@@ -59,7 +60,7 @@ class SocketServer {
             socket.join(`user_${senderId}`)
             console.log(`User connected UserId : ${senderId}`);
 
-            socket.on('send_message', async (data: { receiverId: number, content: string }) => {
+            socket.on(CHAT_EVENTS.SEND_MESSAGE, async (data: { receiverId: number, content: string }) => {
                 try {
                     const conversation = await this.conversationRepo.getConversation({ senderId: senderId, receiverId: data.receiverId })
 
@@ -79,16 +80,16 @@ class SocketServer {
                         created_at
                     }
 
-                    this.io.to(`user_${data.receiverId}`).emit("receive_message", payload)
+                    this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
 
-                    socket.emit('receive_message', payload)
+                    socket.emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
 
                 } catch (error) {
                     console.log(error);
                 }
             })
 
-            socket.on("mark_seen", async ({ conversationId, senderId }) => {
+            socket.on(CHAT_EVENTS.MARK_SEEN, async ({ conversationId, senderId: sender_id }) => {
                 const user = socket.data.user;
 
                 await this.messageRepo.update(
@@ -102,10 +103,25 @@ class SocketServer {
                 );
 
                 // notify sender
-                this.io.to(`user_${senderId}`).emit("messages_seen", {
+                this.io.to(`user_${sender_id}`).emit(CHAT_EVENTS.MESSAGES_SEEN, {
                     conversationId,
                 });
             });
+
+
+            socket.on(CHAT_EVENTS.TYPING_START, (data: { receiverId: number }) => {
+                this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
+                    senderId,
+                    isTyping: true
+                })
+            })
+
+            socket.on(CHAT_EVENTS.TYPING_STOP, (data: { receiverId: number }) => {
+                this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
+                    senderId,
+                    isTyping: false
+                })
+            })
 
             socket.on("disconnect", () => {
                 console.log(`User disconnect UserId : ${senderId}`);
