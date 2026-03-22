@@ -11,6 +11,7 @@ export const groupValidation = {
         description: Joi.string().max(255).optional().allow("", null),
         avatar: Joi.string().uri().optional().allow("", null),
         join_mode: Joi.string().valid("open", "approval").optional().default("open"),
+        member_ids: Joi.array().items(Joi.number().integer().positive()).optional().default([]),
     }),
 
     updateGroup: Joi.object({

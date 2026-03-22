@@ -20,7 +20,6 @@ export const GROUP_EVENTS = {
     MARK_SEEN: "group_mark_seen",
     TYPING_START: "group_typing_start",
     TYPING_STOP: "group_typing_stop",
-    JOIN_ROOM: "group_join_room",
 
     // Server → Client
     RECEIVE_MESSAGE: "group_receive_message",
@@ -29,7 +28,13 @@ export const GROUP_EVENTS = {
     MEMBER_JOINED: "group_member_joined",
     MEMBER_LEFT: "group_member_left",
     JOIN_REQUEST: "group_join_request",
+    NOTIFICATION: "group_notification",
     ERROR: "group_error",
+} as const
+
+export const JOIN_MODES = {
+    OPEN: 'open',
+    APPROVAL: 'approval'
 } as const
 
 export type ChatEvent = typeof CHAT_EVENTS[keyof typeof CHAT_EVENTS]

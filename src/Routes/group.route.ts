@@ -26,7 +26,7 @@ class GroupRoute implements Routes {
 
         // ── join via invite link (no group membership needed) ────────────────
         // NOTE: this must be BEFORE /:id routes to avoid conflict
-        this.router.get(
+        this.router.post(
             `${this.path}/join/:token`,
             this.groupController.joinViaLink
         )

@@ -5,6 +5,7 @@ export interface CreateGroupDTO {
     description?: string
     avatar?: string
     join_mode?: "open" | "approval"
+    member_ids?: number[]
 }
 
 export interface UpdateGroupDTO {

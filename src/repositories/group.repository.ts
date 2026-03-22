@@ -1,5 +1,5 @@
 import crypto from "crypto"
-import { Transaction } from "sequelize"
+import { literal, Op, Transaction } from "sequelize"
 import BaseRepository from "@/repositories"
 import Group from "@/models/group.model"
 import GroupSetting from "@/models/group-setting.model"
@@ -24,29 +24,37 @@ class GroupRepository extends BaseRepository<Group> {
         try {
             // 1. create the group
             const group = await this.create(
-                {
-                    ...data,
-                    created_by: userId,
-                },
+                { ...data, created_by: userId },
                 { transaction }
             )
 
-            // 2. create default settings for the group
+            // 2. create default settings
             await GroupSetting.create(
                 { group_id: group.id },
                 { transaction }
             )
 
-            // 3. add creator as admin member
+            // 3. add creator as admin
             await GroupMember.create(
-                {
-                    group_id: group.id,
-                    user_id: userId,
-                    role: "admin",
-                    added_by: null,
-                },
+                { group_id: group.id, user_id: userId, role: "admin", added_by: null },
                 { transaction }
             )
+
+            // 4. add initial members if provided
+            if (data.member_ids?.length) {
+                const members = data.member_ids
+                    .filter((id) => id !== userId) // skip creator, already added above
+                    .map((id) => ({
+                        group_id: group.id,
+                        user_id: id,
+                        role: "member" as const,
+                        added_by: userId,
+                    }))
+
+                if (members.length) {
+                    await GroupMember.bulkCreate(members, { transaction })
+                }
+            }
 
             await transaction.commit()
             return group
@@ -57,14 +65,33 @@ class GroupRepository extends BaseRepository<Group> {
     }
 
     // ─── Get all groups a user belongs to (with unread count) ───────────────
-    readonly findAllByUserId = async (userId: number): Promise<Group[]> => {
-        return await this.findAll({
+    readonly findAllByUserId = async ({
+        userId,
+        search,
+        page = 1,
+        limit = 20,
+    }: {
+        userId: number
+        search?: string
+        page?: number
+        limit?: number
+    }) => {
+        const offset = (page - 1) * limit
+
+        const whereClause: any = {}
+
+        if (search) {
+            whereClause.name = { [Op.iLike]: `%${search}%` }
+        }
+
+        const { rows, count } = await this.findAndCountAll({
+            where: whereClause,
             include: [
                 {
                     model: GroupMember,
                     as: "members",
-                    where: { user_id: userId },  // only groups this user is in
-                    attributes: ["role", "last_read_at"],
+                    where: { user_id: userId },  // only to filter groups user belongs to
+                    attributes: ["id", "role", "last_read_at"],
                 },
                 {
                     model: User,
@@ -76,7 +103,29 @@ class GroupRepository extends BaseRepository<Group> {
                     as: "settings",
                 },
             ],
+            attributes: {
+                include: [
+                    [
+                        literal(`(SELECT COUNT(*) FROM group_members WHERE group_members.group_id = "Group"."id" AND group_members.deleted_at IS NULL)`),
+                        "member_count"
+                    ]
+                ]
+            },
+            limit,
+            offset,
+            order: [["created_at", "DESC"]],
         })
+
+        const totalPages = Math.ceil(count / limit)
+
+        return {
+            groups: rows,
+            count,
+            total_pages: totalPages,
+            per_page: limit,
+            page,
+            hasMore: page < totalPages,
+        }
     }
 
     // ─── Get single group with full details ──────────────────────────────────
@@ -87,6 +136,7 @@ class GroupRepository extends BaseRepository<Group> {
                 {
                     model: GroupMember,
                     as: "members",
+                    attributes: ["id", "role", "last_read_at", "added_by", "joined_at"], // ← add this
                     include: [
                         {
                             model: User,
@@ -105,6 +155,14 @@ class GroupRepository extends BaseRepository<Group> {
                     attributes: ["id", "name", "avatar"],
                 },
             ],
+            attributes: {
+                include: [
+                    [
+                        literal(`(SELECT COUNT(*) FROM group_members WHERE group_members.group_id = "Group"."id" AND group_members.deleted_at IS NULL)`),
+                        "member_count"
+                    ]
+                ]
+            },
         })
 
         if (!group) throw new AppError("Group not found", 404)

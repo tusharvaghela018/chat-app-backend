@@ -9,7 +9,7 @@ class GroupMiddleware {
     private memberRepo = new GroupMemberRepository()
 
     // ─── Must be a member of the group ───────────────────────────────────────
-    requireMember = async (req: Request, _: Response, next: NextFunction) => {
+    readonly requireMember = async (req: Request, _: Response, next: NextFunction) => {
         try {
             const groupId = Number(req.params.id)
             const userId = (req.user as User).id
@@ -26,7 +26,7 @@ class GroupMiddleware {
     }
 
     // ─── Must be an admin of the group ───────────────────────────────────────
-    requireAdmin = async (req: Request, _: Response, next: NextFunction) => {
+    readonly requireAdmin = async (req: Request, _: Response, next: NextFunction) => {
         try {
             const groupId = Number(req.params.id)
             const userId = (req.user as User).id
@@ -42,7 +42,7 @@ class GroupMiddleware {
 
     // ─── Check a specific group setting against member role ──────────────────
     // usage: checkSetting("who_can_send")
-    checkSetting = (settingKey: keyof GroupSetting) => {
+    readonly checkSetting = (settingKey: keyof GroupSetting) => {
         return async (req: Request, _: Response, next: NextFunction) => {
             try {
                 const groupId = Number(req.params.id)

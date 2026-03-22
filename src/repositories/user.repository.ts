@@ -86,13 +86,48 @@ class UserRepository extends BaseRepository<User> {
         return userJson;
     }
 
-    readonly getUserList = async (userId: number) => {
-        return await this.findAll({
-            where: {
-                id: { [Op.ne]: userId }
-            },
-            attributes: ['id', 'name', 'avatar', 'is_online', 'email']
+    readonly getUserList = async ({
+        userId,
+        search,
+        page = 1,
+        limit = 20,
+    }: {
+        userId: number
+        search?: string
+        page?: number
+        limit?: number
+    }) => {
+        const offset = (page - 1) * limit
+
+        const whereClause: any = {
+            id: { [Op.ne]: userId }
+        }
+
+        if (search) {
+            whereClause[Op.or] = [
+                { name: { [Op.iLike]: `%${search}%` } },
+                { email: { [Op.iLike]: `%${search}%` } },
+            ]
+        }
+
+        const { rows, count } = await this.findAndCountAll({
+            where: whereClause,
+            attributes: ["id", "name", "avatar", "is_online", "email"],
+            limit,
+            offset,
+            order: [["name", "ASC"]],
         })
+
+        const totalPages = Math.ceil(count / limit)
+
+        return {
+            users: rows,
+            count,                  // total matching records
+            total_pages: totalPages,
+            per_page: limit,
+            page,
+            hasMore: page < totalPages,
+        }
     }
 }
 

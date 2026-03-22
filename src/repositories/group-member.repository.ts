@@ -33,12 +33,28 @@ class GroupMemberRepository extends BaseRepository<GroupMember> {
     // ─── Add a member to group ───────────────────────────────────────────────
     readonly addMember = async (
         groupId: number,
-        addedBy: number | null,    // null = joined via invite link
+        addedBy: number | null,
         data: AddMemberDTO
     ): Promise<GroupMember> => {
-        // check not already a member
-        const existing = await this.isMember(groupId, data.user_id)
-        if (existing) throw new AppError("User is already a member of this group", 400)
+        // check if soft-deleted record exists — restore it instead of creating new
+        const existing = await GroupMember.findOne({
+            where: { group_id: groupId, user_id: data.user_id },
+            paranoid: false,  // ← include soft-deleted records
+        })
+
+        if (existing) {
+            if (!(existing as any).deleted_at) {
+                throw new AppError("User is already a member of this group", 400)
+            }
+
+            // restore soft-deleted record
+            await existing.restore()
+            await existing.update({
+                role: data.role ?? "member",
+                added_by: addedBy,
+            })
+            return existing
+        }
 
         return await this.create({
             group_id: groupId,
@@ -128,6 +144,16 @@ class GroupMemberRepository extends BaseRepository<GroupMember> {
                 },
             ],
         })
+    }
+
+    //  ─── Get all group ids by user ids ───────────────────────────
+    // in GroupMemberRepository
+    readonly findGroupIdsByUserId = async (userId: number): Promise<number[]> => {
+        const memberships = await this.findAll({
+            where: { user_id: userId },
+            attributes: ["group_id"],
+        });
+        return memberships.map((m) => m.group_id);
     }
 }
 

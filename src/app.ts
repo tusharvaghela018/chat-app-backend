@@ -116,7 +116,7 @@ class App {
     }
 
     private initializeErrorHandling = () => {
-        this.app.use((err: any, _: Request, res: Response) => {
+        this.app.use((err: any, _: Request, res: Response, _next: NextFunction) => {
 
             // 🔹 AppError (custom errors)
             if (err instanceof AppError) {

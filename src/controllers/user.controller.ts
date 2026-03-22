@@ -11,8 +11,18 @@ class UserController {
 
     readonly getUserList = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as User).id
-        const users = await this.userRepo.getUserList(userId)
-        return sendResponse({ res, data: users, success: true })
+        const search = req.query.search as string | undefined
+        const page = req.query.page ? Number(req.query.page) : 1
+        const limit = req.query.limit ? Number(req.query.limit) : 20
+
+        const data = await this.userRepo.getUserList({
+            userId,
+            search,
+            page,
+            limit,
+        })
+
+        return sendResponse({ res, data, success: true })
     })
 }
 

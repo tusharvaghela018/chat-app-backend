@@ -8,6 +8,8 @@ import GroupMemberRepository from "@/repositories/group-member.repository"
 import GroupMessageRepository from "@/repositories/group-message.repository"
 import GroupJoinRequestRepository from "@/repositories/group-join-request.repository"
 import GroupSetting from "@/models/group-setting.model"
+import { JOIN_MODES } from "@/constants/socket.constants"
+import SocketServer from "@/config/Socket"
 
 class GroupController {
     private groupRepo = new GroupRepository()
@@ -16,7 +18,7 @@ class GroupController {
     private joinRequestRepo = new GroupJoinRequestRepository()
 
     // ─── POST /groups ─────────────────────────────────────────────────────────
-    createGroup = asyncHandler(async (req: Request, res: Response) => {
+    readonly createGroup = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as User).id
 
         const group = await this.groupRepo.createWithSettings(userId, req.body)
@@ -31,20 +33,28 @@ class GroupController {
     })
 
     // ─── GET /groups ──────────────────────────────────────────────────────────
-    getMyGroups = asyncHandler(async (req: Request, res: Response) => {
+    readonly getMyGroups = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as User).id
+        const search = req.query.search as string | undefined
+        const page = req.query.page ? Number(req.query.page) : 1
+        const limit = req.query.limit ? Number(req.query.limit) : 20
 
-        const groups = await this.groupRepo.findAllByUserId(userId)
+        const data = await this.groupRepo.findAllByUserId({
+            userId,
+            search,
+            page,
+            limit,
+        })
 
         return sendResponse({
             res,
             message: "Groups fetched successfully",
-            data: { groups },
+            data,
         })
     })
 
     // ─── GET /groups/:id ──────────────────────────────────────────────────────
-    getGroupById = asyncHandler(async (req: Request, res: Response) => {
+    readonly getGroupById = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
 
         const group = await this.groupRepo.findByIdWithDetails(groupId)
@@ -57,7 +67,7 @@ class GroupController {
     })
 
     // ─── PATCH /groups/:id ────────────────────────────────────────────────────
-    updateGroup = asyncHandler(async (req: Request, res: Response) => {
+    readonly updateGroup = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
 
         await this.groupRepo.updateGroup(groupId, req.body)
@@ -73,7 +83,7 @@ class GroupController {
     })
 
     // ─── DELETE /groups/:id ───────────────────────────────────────────────────
-    deleteGroup = asyncHandler(async (req: Request, res: Response) => {
+    readonly deleteGroup = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
 
         await this.groupRepo.deleteGroup(groupId)
@@ -86,7 +96,7 @@ class GroupController {
     })
 
     // ─── POST /groups/:id/members ─────────────────────────────────────────────
-    addMember = asyncHandler(async (req: Request, res: Response) => {
+    readonly addMember = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
         const adminId = (req.user as User).id
 
@@ -97,10 +107,11 @@ class GroupController {
             attributes: ["name"],
         })
         const admin = await User.findByPk(adminId, { attributes: ["name"] })
-        await this.messageRepo.createSystemMessage(
-            groupId,
-            `${addedUser?.name} was added by ${admin?.name}`
-        )
+
+        await this.createAndEmitSystemMessage(groupId,
+            `${addedUser?.name} was added by ${admin?.name}`)
+
+        SocketServer.getInstance().notifyMemberAdded(req.body.user_id, groupId)
 
         return sendResponse({
             res,
@@ -112,7 +123,7 @@ class GroupController {
     })
 
     // ─── DELETE /groups/:id/members/:userId ───────────────────────────────────
-    removeMember = asyncHandler(async (req: Request, res: Response) => {
+    readonly removeMember = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
         const targetUserId = Number(req.params.userId)
         const adminId = (req.user as User).id
@@ -128,10 +139,14 @@ class GroupController {
         await this.memberRepo.removeMember(groupId, targetUserId)
 
         // system message: "Bob was removed by Admin"
-        await this.messageRepo.createSystemMessage(
+        await this.createAndEmitSystemMessage(
             groupId,
             `${targetUser?.name} was removed by ${admin?.name}`
         )
+
+        // ← notify removed user's socket to leave the group room
+        SocketServer.getInstance().notifyMemberLeft(groupId, targetUserId)
+
 
         return sendResponse({
             res,
@@ -141,10 +156,10 @@ class GroupController {
     })
 
     // ─── PATCH /groups/:id/members/:userId ────────────────────────────────────
-    updateMemberRole = asyncHandler(async (req: Request, res: Response) => {
+    readonly updateMemberRole = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
         const targetUserId = Number(req.params.userId)
-        const adminId = (req.user as User).id
+        // const adminId = (req.user as User).id
 
         await this.memberRepo.updateRole(groupId, targetUserId, req.body)
 
@@ -155,7 +170,7 @@ class GroupController {
             ? `${targetUser?.name} is now an admin`
             : `${targetUser?.name} is no longer an admin`
 
-        await this.messageRepo.createSystemMessage(groupId, action)
+        await this.createAndEmitSystemMessage(groupId, action)
 
         return sendResponse({
             res,
@@ -165,7 +180,7 @@ class GroupController {
     })
 
     // ─── DELETE /groups/:id/leave ─────────────────────────────────────────────
-    leaveGroup = asyncHandler(async (req: Request, res: Response) => {
+    readonly leaveGroup = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
         const userId = (req.user as User).id
 
@@ -186,10 +201,12 @@ class GroupController {
         const user = await User.findByPk(userId, { attributes: ["name"] })
         await this.memberRepo.removeMember(groupId, userId)
 
-        await this.messageRepo.createSystemMessage(
+        await this.createAndEmitSystemMessage(
             groupId,
             `${user?.name} left the group`
         )
+
+        SocketServer.getInstance().notifyMemberLeft(groupId, userId)
 
         return sendResponse({
             res,
@@ -199,7 +216,7 @@ class GroupController {
     })
 
     // ─── GET /groups/:id/messages ─────────────────────────────────────────────
-    getMessages = asyncHandler(async (req: Request, res: Response) => {
+    readonly getMessages = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
         const userId = (req.user as User).id
         const before = req.query.before ? Number(req.query.before) : undefined
@@ -222,7 +239,7 @@ class GroupController {
     })
 
     // ─── PATCH /groups/:id/settings ───────────────────────────────────────────
-    updateSettings = asyncHandler(async (req: Request, res: Response) => {
+    readonly updateSettings = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
 
         await GroupSetting.update(req.body, { where: { group_id: groupId } })
@@ -238,7 +255,7 @@ class GroupController {
     })
 
     // ─── POST /groups/:id/invite ──────────────────────────────────────────────
-    generateInviteLink = asyncHandler(async (req: Request, res: Response) => {
+    readonly generateInviteLink = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
         const { expires_in_hours } = req.body  // optional
 
@@ -256,7 +273,7 @@ class GroupController {
     })
 
     // ─── GET /groups/join/:token ──────────────────────────────────────────────
-    joinViaLink = asyncHandler(async (req: Request, res: Response) => {
+    readonly joinViaLink = asyncHandler(async (req: Request, res: Response) => {
         const { token } = req.params
         const userId = (req.user as User).id
 
@@ -265,16 +282,25 @@ class GroupController {
         // check if already a member
         const alreadyMember = await this.memberRepo.isMember(group.id, userId)
         if (alreadyMember) {
-            throw new AppError("You are already a member of this group", 409)
+            // throw new AppError("You are already a member of this group", 400)
+            return sendResponse(
+                {
+                    res,
+                    data: {
+                        group_id: group.id
+                    },
+                    message: ""
+                }
+            )
         }
 
         // open mode → join instantly
-        if (group.join_mode === "open") {
+        if (group.join_mode === JOIN_MODES.OPEN) {
             const user = await User.findByPk(userId, { attributes: ["name"] })
 
             await this.memberRepo.addMember(group.id, null, { user_id: userId })
 
-            await this.messageRepo.createSystemMessage(
+            await this.createAndEmitSystemMessage(
                 group.id,
                 `${user?.name} joined via invite link`
             )
@@ -292,7 +318,7 @@ class GroupController {
 
         return sendResponse({
             res,
-            statusCode: 202,  // 202 Accepted = pending, not yet done
+            statusCode: 201,  // 202 Accepted = pending, not yet done
             message: "Join request sent. Waiting for admin approval.",
             data: { request },
             show_toast: true,
@@ -300,7 +326,7 @@ class GroupController {
     })
 
     // ─── GET /groups/:id/join-requests ───────────────────────────────────────
-    getPendingRequests = asyncHandler(async (req: Request, res: Response) => {
+    readonly getPendingRequests = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
 
         const requests = await this.joinRequestRepo.findPending(groupId)
@@ -313,7 +339,7 @@ class GroupController {
     })
 
     // ─── PATCH /groups/:id/join-requests/:requestId ───────────────────────────
-    reviewJoinRequest = asyncHandler(async (req: Request, res: Response) => {
+    readonly reviewJoinRequest = asyncHandler(async (req: Request, res: Response) => {
         const requestId = Number(req.params.requestId)
         const adminId = (req.user as User).id
         const { status } = req.body   // approved | rejected
@@ -323,7 +349,8 @@ class GroupController {
         // system message only on approval
         if (status === "approved") {
             const user = await User.findByPk(request.user_id, { attributes: ["name"] })
-            await this.messageRepo.createSystemMessage(
+
+            await this.createAndEmitSystemMessage(
                 request.group_id,
                 `${user?.name} joined the group`
             )
@@ -338,6 +365,21 @@ class GroupController {
             show_toast: true,
         })
     })
+
+    // add this private helper
+    private async createAndEmitSystemMessage(groupId: number, content: string) {
+        const message = await this.messageRepo.createSystemMessage(groupId, content)
+        const { id, group_id, sender_id, type, created_at } = message.toJSON()
+
+        SocketServer.getInstance().notifyGroupMessage(groupId, {
+            id,
+            group_id,
+            sender_id,
+            content,
+            type,
+            created_at,
+        })
+    }
 }
 
 export default GroupController
