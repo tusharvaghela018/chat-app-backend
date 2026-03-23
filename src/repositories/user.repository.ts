@@ -1,4 +1,4 @@
-import { LoginDTO, RegisterDTO } from "@/dtos/auth.dto";
+import { LoginDTO, RegisterDTO, ForgotPasswordDTO, ResetPasswordDTO } from "@/dtos/auth.dto";
 import { IUser } from "@/types/models/user.interface";
 import User from "@/models/user.model";
 import BaseRepository from "@/repositories";
@@ -6,11 +6,58 @@ import jwtUtil from "@/utils/jwt.util";
 import { Profile } from "passport-google-oauth20";
 import { Op } from "sequelize";
 import AppError from "@/utils/appError";
+import emailService from "@/services/email.service";
 
 class UserRepository extends BaseRepository<User> {
     constructor() {
         super(User);
     }
+
+    // ─── Forgot Password ─────────────────────────────────────────────
+    readonly forgotPassword = async (data: ForgotPasswordDTO): Promise<void> => {
+        const { email } = data;
+        const user = await this.findOne({ where: { email } });
+
+        if (!user) {
+            throw new AppError("User not found with this email", 404);
+        }
+
+        // Generate a JWT token for password reset using the default expiration
+        const resetToken = jwtUtil.sign(
+            { id: user.id!, email: user.email }
+        );
+
+        await emailService.sendPasswordResetEmail(user.email, resetToken);
+    };
+
+    // ─── Reset Password ──────────────────────────────────────────────
+    readonly resetPassword = async (data: ResetPasswordDTO): Promise<void> => {
+        const { token, password } = data;
+
+        try {
+            // Verify the JWT token
+            const decoded = jwtUtil.verify(token);
+
+            const user = await this.findById(decoded.id);
+
+            if (!user) {
+                throw new AppError("User no longer exists", 404);
+            }
+
+            // Update user's password
+            await user.update({
+                password,
+            });
+        } catch (error: any) {
+            if (error.name === "TokenExpiredError") {
+                throw new AppError("Reset token has expired", 400);
+            }
+            if (error.name === "JsonWebTokenError") {
+                throw new AppError("Invalid reset token", 400);
+            }
+            throw error;
+        }
+    };
 
     // ─── Google OAuth Login / Register ───────────────────────────────
     readonly googleLogin = async (profile: Profile): Promise<{ user: Partial<User> }> => {

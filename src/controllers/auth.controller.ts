@@ -23,6 +23,16 @@ class AuthController {
         return sendResponse({ res, data: { user, token }, message: "Signup successfully", show_toast: true })
     })
 
+    public forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+        await this.userRepo.forgotPassword(req.body)
+        return sendResponse({ res, message: "Password reset link sent to your email", show_toast: true })
+    })
+
+    public resetPassword = asyncHandler(async (req: Request, res: Response) => {
+        await this.userRepo.resetPassword(req.body)
+        return sendResponse({ res, message: "Password reset successfully", show_toast: true })
+    })
+
     public googleCallback = asyncHandler(async (req: Request, res: Response) => {
         const user = req.user as User;
         const token = jwtUtil.sign({ id: user.id, email: user.email });
