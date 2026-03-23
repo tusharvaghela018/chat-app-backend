@@ -21,7 +21,12 @@ class GroupController {
     readonly createGroup = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as User).id
 
-        const group = await this.groupRepo.createWithSettings(userId, req.body)
+        const avatar = (req.file as any)?.path ?? null
+
+        const group = await this.groupRepo.createWithSettings(userId, {
+            ...req.body,
+            ...(avatar && { avatar }),  // ← add avatar if present
+        })
 
         return sendResponse({
             res,
@@ -70,7 +75,13 @@ class GroupController {
     readonly updateGroup = asyncHandler(async (req: Request, res: Response) => {
         const groupId = Number(req.params.id)
 
-        await this.groupRepo.updateGroup(groupId, req.body)
+        // get avatar url if file uploaded
+        const avatar = (req.file as any)?.path ?? null
+
+        await this.groupRepo.updateGroup(groupId, {
+            ...req.body,
+            ...(avatar && { avatar }),  // ← add avatar if present
+        })
 
         const updated = await this.groupRepo.findByIdWithDetails(groupId)
 

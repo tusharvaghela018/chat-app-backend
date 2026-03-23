@@ -6,6 +6,7 @@ import GroupMiddleware from "@/middlewares/group.middleware"
 import ValidationMiddleware from "@/middlewares/validation.middleware"
 import GroupController from "@/controllers/group.controller"
 import { groupValidation } from "@/validations/group.validation"
+import uploadMiddleware from "@/middlewares/upload.middleware"
 
 class GroupRoute implements Routes {
     public path = "/groups"
@@ -34,6 +35,7 @@ class GroupRoute implements Routes {
         // ── group CRUD ───────────────────────────────────────────────────────
         this.router.post(
             `${this.path}`,
+            uploadMiddleware.groupAvatar,
             this.validationMiddleware.body(groupValidation.createGroup),
             this.groupController.createGroup
         )
@@ -53,6 +55,7 @@ class GroupRoute implements Routes {
             `${this.path}/:id`,
             this.groupMiddleware.requireMember,
             this.groupMiddleware.checkSetting("who_can_edit_info"),
+            uploadMiddleware.groupAvatar,
             this.validationMiddleware.body(groupValidation.updateGroup),
             this.groupController.updateGroup
         )
