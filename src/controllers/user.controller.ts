@@ -24,6 +24,18 @@ class UserController {
 
         return sendResponse({ res, data, success: true })
     })
+
+    readonly updateUserAvatar = asyncHandler(async (req: Request, res: Response) => {
+        const userId = (req.user as any).id
+        const avatar = (req.file as any)?.path ?? null
+        await this.userRepo.update({ avatar }, {
+            where: {
+                id: userId
+            }
+        })
+
+        return sendResponse({ res, message: "Profile Updated successfully", show_toast: true })
+    })
 }
 
 export default UserController
