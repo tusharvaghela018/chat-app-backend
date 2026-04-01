@@ -79,10 +79,6 @@ class App {
     };
 
     private initializeRoutes = (routes: Routes[]) => {
-        this.app.get("/", (_, res: Response) => {
-            res.status(200).json("Server is running");
-        });
-
         routes.forEach(route => {
             this.app.use("/", route.router);
         });

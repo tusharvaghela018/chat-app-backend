@@ -15,6 +15,15 @@ class AuthMiddleware {
         })(req, res, next)
     }
 
+    readonly softAuthenticate = (req: Request, res: Response, next: NextFunction) => {
+        passport.authenticate("jwt", { session: false }, (err: Error, user: User) => {
+            if (user) {
+                req.user = user;
+            }
+            next()
+        })(req, res, next)
+    }
+
     readonly passportMiddleware = async (req: Request, res: Response, next: NextFunction) => {
         passport.authenticate('google', { session: false }, (err, user, info) => {
             if (err) {
