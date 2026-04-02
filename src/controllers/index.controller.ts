@@ -81,6 +81,83 @@ class IndexController {
                 }]
             });
 
+            // 5. Recent Activity
+            // Recent 1:1 messages received
+            const recentDirect = await Message.findAll({
+                limit: 5,
+                order: [['created_at', 'DESC']],
+                include: [
+                    {
+                        model: Conversation,
+                        required: true,
+                        where: {
+                            [Op.or]: [
+                                { sender_id: user.id },
+                                { receiver_id: user.id }
+                            ]
+                        }
+                    },
+                    {
+                        model: User,
+                        attributes: ['id', 'name']
+                    }
+                ],
+                where: {
+                    sender_id: { [Op.ne]: user.id }
+                }
+            });
+
+            // Recent group messages in user's groups
+            const userGroups = await GroupMember.findAll({
+                where: { user_id: user.id },
+                attributes: ['group_id']
+            });
+            const groupIds = userGroups.map(ug => ug.group_id);
+
+            const recentGroup = await GroupMessage.findAll({
+                limit: 5,
+                order: [['created_at', 'DESC']],
+                include: [
+                    {
+                        model: Group,
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: User,
+                        attributes: ['id', 'name']
+                    }
+                ],
+                where: {
+                    group_id: { [Op.in]: groupIds },
+                    sender_id: { [Op.ne]: user.id }
+                }
+            });
+
+            const activities: any[] = [];
+
+            recentDirect.forEach(m => {
+                activities.push({
+                    id: `direct-${m.id}`,
+                    user: (m as any).sender?.name || "Someone",
+                    action: "sent you a message",
+                    time: (m as any).created_at,
+                    type: "message"
+                });
+            });
+
+            recentGroup.forEach(m => {
+                activities.push({
+                    id: `group-${m.id}`,
+                    user: (m as any).sender?.name || "System",
+                    action: `posted in ${(m as any).group?.name || "group"}`,
+                    time: (m as any).created_at,
+                    type: "group"
+                });
+            });
+
+            // Sort by time descending
+            activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
             return sendResponse({
                 res,
                 statusCode: 200,
@@ -89,11 +166,12 @@ class IndexController {
                 data: {
                     user,
                     stats: {
-                        last_login: (user as any).updated_at, // Use updated_at as a proxy if last_login isn't tracked
+                        last_login: (user as any).updated_at,
                         notifications: unreadDirect,
                         messages: directSent + groupSent,
                         active_chats: activeConversations + groupsJoined
-                    }
+                    },
+                    activities: activities.slice(0, 5)
                 }
             });
         } catch (error) {
