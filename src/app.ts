@@ -82,6 +82,10 @@ class App {
         routes.forEach(route => {
             this.app.use("/", route.router);
         });
+        // ✅ Root route
+        this.app.get("/", (req: Request, res: Response) => {
+            res.status(200).send("🚀 Server is running");
+        });
 
         // 404 handler — unknown routes
         this.app.use((req: Request, res: Response, next: NextFunction) => {

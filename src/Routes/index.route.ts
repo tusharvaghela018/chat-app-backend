@@ -15,7 +15,7 @@ class IndexRoute implements Routes {
 
     private initializeRoutes() {
         // Public route: accessible to both logged-in and guest users
-        this.router.get(`${this.path}`, this.authMiddleware.softAuthenticate, this.indexController.home);
+        this.router.get(`${this.path}home`, this.authMiddleware.softAuthenticate, this.indexController.home);
 
         // Protected route: accessible ONLY to logged-in users
         this.router.get(`${this.path}dashboard`, this.authMiddleware.authenticate, this.indexController.dashboard);
