@@ -8,10 +8,29 @@ class RedisClient {
     private constructor() {
         this.client = createClient({
             url: REDIS_URL,
+            socket: {
+                tls: true, // 🔥 REQUIRED for Upstash
+                reconnectStrategy: (retries) => {
+                    console.log(`Redis reconnect attempt: ${retries}`);
+                    return Math.min(retries * 50, 2000);
+                },
+            },
         });
 
         this.client.on("connect", () => {
             console.log("Redis Connected");
+        });
+
+        this.client.on("ready", () => {
+            console.log("Redis Ready");
+        });
+
+        this.client.on("end", () => {
+            console.log("Redis Disconnected");
+        });
+
+        this.client.on("reconnecting", () => {
+            console.log("Redis Reconnecting...");
         });
 
         this.client.on("error", (err) => {
@@ -27,7 +46,10 @@ class RedisClient {
     }
 
     public async connect() {
-        await this.client.connect();
+        // 🔥 Prevent multiple connections
+        if (!this.client.isOpen) {
+            await this.client.connect();
+        }
     }
 
     public getClient(): RedisClientType {
