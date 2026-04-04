@@ -11,6 +11,7 @@ import SocketServer from "@/config/Socket";
 import PassportConfig from "@/config/Passport";
 import AppError from "@/utils/appError";
 import { sendResponse } from "@/utils";
+import { startMailWorker } from "@/workers/mail.worker";
 
 class App {
     public app: express.Application;
@@ -44,6 +45,8 @@ class App {
         });
         await this.connectToDB();
         await this.connectRedis();
+        // Start background worker
+        startMailWorker();
     };
 
     private initializeMiddleware = () => {

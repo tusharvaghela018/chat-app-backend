@@ -6,7 +6,7 @@ import jwtUtil from "@/utils/jwt.util";
 import { Profile } from "passport-google-oauth20";
 import { Op } from "sequelize";
 import AppError from "@/utils/appError";
-import emailService from "@/services/email.service";
+import mailQueueService from "@/services/mail-queue.service";
 
 class UserRepository extends BaseRepository<User> {
     constructor() {
@@ -27,7 +27,10 @@ class UserRepository extends BaseRepository<User> {
             { id: user.id!, email: user.email }
         );
 
-        await emailService.sendPasswordResetEmail(user.email, resetToken);
+        await mailQueueService.push({
+            type: "password-reset",
+            data: { email: user.email, token: resetToken }
+        });
     };
 
     // ─── Reset Password ──────────────────────────────────────────────
