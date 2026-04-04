@@ -35,7 +35,7 @@ class EmailService {
         }
 
         const mailOptions = {
-            from: SMTP_FROM || '"Chat App" <no-reply@aetherflow.com>',
+            from: SMTP_FROM || '"Nexus App" <no-reply@aetherflow.com>',
             to: email,
             subject: "Reset your password",
             html: `

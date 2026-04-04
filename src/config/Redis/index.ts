@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from "redis";
 import { REDIS_URL } from "@/config";
+import logger from "@/utils/logger";
 
 class RedisClient {
     private static instance: RedisClient;
@@ -12,7 +13,8 @@ class RedisClient {
                 tls: true, // 🔥 REQUIRED for Upstash
                 reconnectStrategy: (retries) => {
                     console.log(`Redis reconnect attempt: ${retries}`);
-                    return Math.min(retries * 50, 2000);
+                    // Exponential backoff with a cap of 10s
+                    return Math.min(retries * 100, 10000);
                 },
             },
         });
@@ -46,7 +48,6 @@ class RedisClient {
     }
 
     public async connect() {
-        // 🔥 Prevent multiple connections
         if (!this.client.isOpen) {
             await this.client.connect();
         }
@@ -54,6 +55,20 @@ class RedisClient {
 
     public getClient(): RedisClientType {
         return this.client;
+    }
+
+    /**
+     * Check if connection is healthy
+     */
+    public async isHealthy(): Promise<boolean> {
+        try {
+            if (!this.client.isOpen) return false;
+            await this.client.ping();
+            return true;
+        } catch (error) {
+            logger.error(error)
+            return false;
+        }
     }
 }
 
