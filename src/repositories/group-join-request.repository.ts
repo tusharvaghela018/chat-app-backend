@@ -16,11 +16,27 @@ class GroupJoinRequestRepository extends BaseRepository<GroupJoinRequest> {
         groupId: number,
         userId: number
     ): Promise<GroupJoinRequest> => {
-        // check for existing pending request
+        // check for existing request (including soft-deleted or already reviewed)
         const existing = await this.findOne({
-            where: { group_id: groupId, user_id: userId, status: "pending" },
+            where: { group_id: groupId, user_id: userId },
+            paranoid: false
         })
-        if (existing) throw new AppError("You already have a pending request for this group", 400)
+
+        if (existing) {
+            if (existing.status === "pending" && !(existing as any).deleted_at) {
+                throw new AppError("You already have a pending request for this group", 400)
+            }
+
+            // if it was previously reviewed or soft-deleted, restore and reset it
+            await existing.restore()
+            await existing.update({
+                status: "pending",
+                requested_at: new Date(),
+                reviewed_by: null,
+                reviewed_at: null,
+            })
+            return existing
+        }
 
         return await this.create({
             group_id: groupId,
@@ -70,15 +86,31 @@ class GroupJoinRequestRepository extends BaseRepository<GroupJoinRequest> {
 
             // if approved → add to group_members
             if (status === "approved") {
-                await GroupMember.create(
-                    {
-                        group_id: request.group_id,
-                        user_id: request.user_id,
+                // Check if they were previously a member (soft-deleted)
+                const existingMember = await GroupMember.findOne({
+                    where: { group_id: request.group_id, user_id: request.user_id },
+                    paranoid: false,
+                    transaction
+                })
+
+                if (existingMember) {
+                    await existingMember.restore({ transaction })
+                    await existingMember.update({
                         role: "member",
                         added_by: adminId,
-                    },
-                    { transaction }
-                )
+                        joined_at: new Date()
+                    }, { transaction })
+                } else {
+                    await GroupMember.create(
+                        {
+                            group_id: request.group_id,
+                            user_id: request.user_id,
+                            role: "member",
+                            added_by: adminId,
+                        },
+                        { transaction }
+                    )
+                }
             }
 
             await transaction.commit()
