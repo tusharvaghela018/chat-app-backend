@@ -26,6 +26,16 @@ class EmailService {
         });
     }
 
+    public async verifyConnection() {
+        try {
+            await this.transporter.verify();
+            return true;
+        } catch (error) {
+            logger.error(error)
+            return false;
+        }
+    }
+
     public async sendPasswordResetEmail(email: string, token: string) {
         const resetLink = `${FRONTEND_URL}/auth/reset-password?token=${token}`;
 
@@ -52,15 +62,26 @@ class EmailService {
         };
 
         try {
+            // Check if SMTP is likely configured (basic check)
+            if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+                if (NODE_ENV !== "production") {
+                    logger.warn("SMTP credentials missing, using Dev Fallback.");
+                    return { dev_fallback: true, link: resetLink };
+                }
+                throw new Error("SMTP configuration is missing");
+            }
+
             const info = await this.transporter.sendMail(mailOptions);
             logger.info("Message sent: %s", info.messageId);
             return info;
         } catch (err: any) {
+            logger.error("Email Service Error:", err.message);
+
+            // On Render free tier, if we are in dev mode and SMTP fails, 
+            // still return success but log it for the user to potentially see if logs are available
             if (NODE_ENV !== "production") {
-                logger.warn(`Email Service Error (Dev Fallback): Check terminal for link. Error: ${err.message}`);
-                return { dev_fallback: true, link: resetLink };
+                return { dev_fallback: true, link: resetLink, error: err.message };
             }
-            logger.error("Email Service Error:", err);
             throw err;
         }
     }

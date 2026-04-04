@@ -6,12 +6,33 @@ import AppError from "@/utils/appError";
 import jwtUtil from "@/utils/jwt.util";
 import type { Request, Response } from "express";
 
+import mailQueueService from "@/services/mail-queue.service";
+import emailService from "@/services/email.service";
+import RedisClient from "@/config/Redis";
+
 class AuthController {
     private userRepo: UserRepository
 
     constructor() {
         this.userRepo = new UserRepository()
     }
+
+    public getMailStatus = asyncHandler(async (req: Request, res: Response) => {
+        const redisHealthy = await RedisClient.getInstance().isHealthy();
+        const smtpHealthy = await emailService.verifyConnection();
+        const queueLength = await mailQueueService.getQueueLength();
+
+        return sendResponse({
+            res,
+            message: "Mail System Status",
+            data: {
+                redis: redisHealthy ? "Connected" : "Disconnected",
+                smtp: smtpHealthy ? "Ready" : "Error",
+                pending_emails: queueLength,
+                env: process.env.NODE_ENV || "development"
+            }
+        });
+    });
 
     public login = asyncHandler(async (req: Request, res: Response) => {
         const { user, token } = await this.userRepo.login(req.body)

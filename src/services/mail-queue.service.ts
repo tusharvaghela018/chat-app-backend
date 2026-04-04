@@ -20,24 +20,32 @@ class MailQueueService {
             const isHealthy = await this.redisClient.isHealthy();
             if (!isHealthy) {
                 logger.warn("Redis client not healthy, reconnecting before push...");
-                // Force a check/reconnect if needed
             }
 
             await client.rPush(MAIL_QUEUE_KEY, JSON.stringify(job));
             logger.info(`Email pushed to queue: ${job.type}`);
         } catch (error: any) {
             logger.error(`Error pushing to mail queue (Attempt ${retryCount + 1}):`, error.message);
-            
+
             // Retry once for ECONNRESET or other transient network errors
             if (retryCount < 1 && (error.code === 'ECONNRESET' || error.message.includes('closed'))) {
                 logger.info("Retrying push to mail queue...");
-                // Give it a tiny bit of time for the client's internal reconnect logic to kick in
                 await new Promise(resolve => setTimeout(resolve, 500));
                 return this.push(job, retryCount + 1);
             }
-            
-            // Rethrow so the caller knows it failed if retries don't help
+
             throw error;
+        }
+    }
+
+    public async getQueueLength(): Promise<number> {
+        try {
+            await this.redisClient.connect();
+            const client = this.redisClient.getClient();
+            return await client.lLen(MAIL_QUEUE_KEY);
+        } catch (error) {
+            logger.error(error)
+            return -1;
         }
     }
 }

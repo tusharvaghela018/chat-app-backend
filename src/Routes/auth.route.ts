@@ -19,6 +19,7 @@ class AuthRoute implements Routes {
     }
 
     private initializeRoutes() {
+        this.router.get(`${this.path}/mail-status`, this.authController.getMailStatus);
         this.router.post(`${this.path}/login`, this.validationMiddleware.body(authValidation.login), this.authController.login);
         this.router.post(`${this.path}/register`, this.validationMiddleware.body(authValidation.register), this.authController.register)
         this.router.post(`${this.path}/forgot-password`, this.validationMiddleware.body(authValidation.forgotPassword), this.authController.forgotPassword);
