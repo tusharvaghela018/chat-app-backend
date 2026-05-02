@@ -4,9 +4,10 @@ import User from "@/models/user.model";
 import BaseRepository from "@/repositories";
 import jwtUtil from "@/utils/jwt.util";
 import { Profile } from "passport-google-oauth20";
-import { Op } from "sequelize";
+import { Op, Sequelize } from "sequelize";
 import AppError from "@/utils/appError";
 import mailQueueService from "@/services/mail-queue.service";
+import Conversation from "@/models/conversations.model";
 
 class UserRepository extends BaseRepository<User> {
     constructor() {
@@ -174,6 +175,20 @@ class UserRepository extends BaseRepository<User> {
                 { name: { [Op.iLike]: `%${search}%` } },
                 { email: { [Op.iLike]: `%${search}%` } },
             ]
+        } else {
+            // Only fetch users who have an active conversation with the current user
+            whereClause.id = {
+                [Op.and]: [
+                    { [Op.ne]: userId },
+                    {
+                        [Op.in]: Sequelize.literal(
+                            `(SELECT sender_id FROM conversations WHERE receiver_id = ${userId} AND deleted_at IS NULL
+                              UNION 
+                              SELECT receiver_id FROM conversations WHERE sender_id = ${userId} AND deleted_at IS NULL)`
+                        )
+                    }
+                ]
+            }
         }
 
         const { rows, count } = await this.findAndCountAll({
