@@ -14,13 +14,13 @@
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": "./src",
+    // "baseUrl": "./src",
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": true,
     "emitDecoratorMetadata": true,
     "paths": {
       "@/*": [
-        "*"
+        "src/*"
       ]
     },
     "typeRoots": [
