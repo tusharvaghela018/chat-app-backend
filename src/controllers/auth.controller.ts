@@ -70,9 +70,8 @@ class AuthController {
         if (!user) {
             throw new AppError('User Not Found', 404)
         }
-        delete user.password
 
-        return sendResponse({ res, data: { user } })
+        return sendResponse({ res, data: { user: (this.userRepo as any).sanitize(user) } })
     });
 }
 
