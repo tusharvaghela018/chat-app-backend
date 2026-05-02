@@ -71,6 +71,24 @@ export default class User extends Model<IUser> implements IUser {
     })
     is_online: boolean;
 
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true
+    })
+    public_key: string;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true
+    })
+    encrypted_vault: string;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true
+    })
+    vault_salt: string;
+
     // 🔐 HASH PASSWORD (CREATE + UPDATE)
     @BeforeCreate
     @BeforeUpdate

@@ -25,6 +25,23 @@ class UserController {
         return sendResponse({ res, data, success: true })
     })
 
+    readonly updatePublicKey = asyncHandler(async (req: Request, res: Response) => {
+        const userId = (req.user as User).id
+        const { public_key, encrypted_vault, vault_salt } = req.body
+
+        await this.userRepo.update({ 
+            public_key,
+            encrypted_vault,
+            vault_salt
+        }, {
+            where: {
+                id: userId
+            }
+        })
+
+        return sendResponse({ res, message: "Security Data Updated successfully", success: true })
+    })
+
     readonly updateUserAvatar = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as any).id
         const avatar = (req.file as any)?.path ?? null

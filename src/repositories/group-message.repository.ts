@@ -13,13 +13,15 @@ class GroupMessageRepository extends BaseRepository<GroupMessage> {
     readonly createMessage = async (
         groupId: number,
         senderId: number,
-        content: string
+        content: string,
+        encrypted_keys?: any
     ): Promise<GroupMessage> => {
         return await this.create({
             group_id: groupId,
             sender_id: senderId,
             content,
             type: "text",
+            encrypted_keys
         })
     }
 

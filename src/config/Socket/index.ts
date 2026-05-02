@@ -139,7 +139,7 @@ class SocketServer {
                 })
             })
 
-            socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string }) => {
+            socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any }) => {
                 try {
                     const member = await this.groupMembersRepo.isMember(data.groupId, senderId)
 
@@ -149,9 +149,9 @@ class SocketServer {
                         })
                     }
 
-                    const message = await this.groupMessageRepo.createMessage(data.groupId, senderId, data.content)
+                    const message = await this.groupMessageRepo.createMessage(data.groupId, senderId, data.content, data.encrypted_keys)
 
-                    const { id, group_id, sender_id, content, type, created_at } = message.toJSON()
+                    const { id, group_id, sender_id, content, type, encrypted_keys, created_at } = message.toJSON()
 
                     const payload = {
                         id,
@@ -159,6 +159,7 @@ class SocketServer {
                         sender_id,
                         content,
                         type,
+                        encrypted_keys,
                         created_at,
                         sender: {
                             id: socket.data.user.id,

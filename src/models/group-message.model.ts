@@ -34,6 +34,9 @@ export default class GroupMessage extends Model<IGroupMessage> implements IGroup
     @Column({ type: DataType.STRING(20), allowNull: false, defaultValue: "text" })
     type: "text" | "system";
 
+    @Column({ type: DataType.JSONB, allowNull: true })
+    encrypted_keys: any;
+
     // ── Associations ──────────────────────────────────────────
     @BelongsTo(() => Group, "group_id")
     group: Group;

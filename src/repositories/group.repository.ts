@@ -141,7 +141,7 @@ class GroupRepository extends BaseRepository<Group> {
                         {
                             model: User,
                             as: "user",
-                            attributes: ["id", "name", "avatar", "is_online"],
+                            attributes: ["id", "name", "avatar", "is_online", "public_key"],
                         },
                     ],
                 },
