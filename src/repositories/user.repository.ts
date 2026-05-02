@@ -71,8 +71,17 @@ class UserRepository extends BaseRepository<User> {
         let user = await this.findOne({ where: { email } });
 
         if (!user) {
+            // Generate a username from name
+            let username = profile.displayName.toLowerCase().replace(/\s+/g, "_");
+            // Check if username already exists
+            const existingUsername = await this.findOne({ where: { username } });
+            if (existingUsername) {
+                username = `${username}_${Math.floor(Math.random() * 1000)}`;
+            }
+
             user = await this.create({
                 name: profile.displayName,
+                username,
                 email,
                 google_id: profile.id,
                 avatar: profile.photos?.[0]?.value ?? null,
@@ -111,16 +120,22 @@ class UserRepository extends BaseRepository<User> {
 
     // ─── Register ─────────────────────────────────────────────────────
     readonly register = async (data: RegisterDTO): Promise<{ user: Partial<User>; token: string }> => {
-        const { name, email, password } = data
-        const existing = await this.findOne({ where: { email: email } });
+        const { name, username, email, password } = data
+        const existingEmail = await this.findOne({ where: { email: email } });
 
-        if (existing) {
+        if (existingEmail) {
             throw new AppError("Email is already registered");
         }
 
+        const existingUsername = await this.findOne({ where: { username } });
+        if (existingUsername) {
+            throw new AppError("Username is already taken");
+        }
+
         const user = await this.create({
-            name: name,
-            email: email,
+            name,
+            username,
+            email,
             password,
         } as IUser);
 
@@ -155,6 +170,7 @@ class UserRepository extends BaseRepository<User> {
 
         if (search) {
             whereClause[Op.or] = [
+                { username: { [Op.iLike]: `%${search}%` } },
                 { name: { [Op.iLike]: `%${search}%` } },
                 { email: { [Op.iLike]: `%${search}%` } },
             ]
@@ -162,7 +178,7 @@ class UserRepository extends BaseRepository<User> {
 
         const { rows, count } = await this.findAndCountAll({
             where: whereClause,
-            attributes: ["id", "name", "avatar", "is_online", "email"],
+            attributes: ["id", "name", "username", "avatar", "is_online", "email"],
             limit,
             offset,
             order: [["name", "ASC"]],

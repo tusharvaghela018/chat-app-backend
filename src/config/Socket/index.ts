@@ -91,6 +91,7 @@ class SocketServer {
                         id,
                         content,
                         sender_id,
+                        receiver_id: data.receiverId,
                         conversation_id,
                         created_at
                     }

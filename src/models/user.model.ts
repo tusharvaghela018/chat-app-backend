@@ -34,6 +34,13 @@ export default class User extends Model<IUser> implements IUser {
     name: string;
 
     @Column({
+        type: DataType.STRING(100),
+        allowNull: false,
+        unique: true
+    })
+    username: string;
+
+    @Column({
         type: DataType.STRING(150),
         allowNull: false,
         unique: true
