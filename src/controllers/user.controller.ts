@@ -2,6 +2,7 @@ import User from "@/models/user.model";
 import UserRepository from "@/repositories/user.repository";
 import asyncHandler, { sendResponse } from "@/utils";
 import { Request, Response } from "express";
+import { Op } from "sequelize";
 
 class UserController {
     private userRepo: UserRepository
@@ -42,16 +43,35 @@ class UserController {
         return sendResponse({ res, message: "Security Data Updated successfully", success: true })
     })
 
-    readonly updateUserAvatar = asyncHandler(async (req: Request, res: Response) => {
+    readonly updateProfile = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as any).id
-        const avatar = (req.file as any)?.path ?? null
-        await this.userRepo.update({ avatar }, {
+        const { name, username } = req.body
+        const avatar = (req.file as any)?.path
+
+        const updateData: any = {}
+        if (name) updateData.name = name
+        if (avatar) updateData.avatar = avatar
+
+        if (username) {
+            const existingUser = await this.userRepo.findOne({
+                where: {
+                    username,
+                    id: { [Op.ne]: userId }
+                }
+            })
+            if (existingUser) {
+                return sendResponse({ res, message: "Username is already taken", success: false, show_toast: true })
+            }
+            updateData.username = username
+        }
+
+        await this.userRepo.update(updateData, {
             where: {
                 id: userId
             }
         })
 
-        return sendResponse({ res, message: "Profile Updated successfully", show_toast: true })
+        return sendResponse({ res, message: "Profile Updated successfully", success: true, show_toast: true })
     })
 }
 
