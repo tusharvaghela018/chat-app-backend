@@ -56,6 +56,20 @@ export default class Message extends Model<IMessage> implements IMessage {
     })
     is_seen: boolean;
 
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    })
+    is_hidden_for_sender_id: boolean;
+
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    })
+    is_hidden_for_receiver_id: boolean;
+
     // Who sent this message
     @BelongsTo(() => User, "sender_id")
     sender: User;
@@ -63,4 +77,8 @@ export default class Message extends Model<IMessage> implements IMessage {
     // Which conversation this message belongs to
     @BelongsTo(() => Conversation, "conversation_id")
     conversation: Conversation;
+
+    created_at: Date;
+    updated_at: Date;
+    deleted_at: Date;
 }
