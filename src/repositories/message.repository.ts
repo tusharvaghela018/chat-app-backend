@@ -25,7 +25,22 @@ class MessageRepository extends BaseRepository<Message> {
             return;
         }
 
-        return await this.findAll({ where: { conversation_id: conversation?.id }, order: [["created_at", "ASC"]] })
+        // 🔒 Pending Request Privacy:
+        // Recipients cannot see messages until they ACCEPT the request.
+        if (conversation.status === 'pending' && conversation.receiver_id === senderId) {
+            return [];
+        }
+
+        const isSender = conversation.sender_id === senderId
+        const filterField = isSender ? 'is_hidden_for_sender_id' : 'is_hidden_for_receiver_id'
+
+        return await this.findAll({
+            where: {
+                conversation_id: conversation?.id,
+                [filterField]: false
+            },
+            order: [["created_at", "ASC"]]
+        })
     }
 }
 

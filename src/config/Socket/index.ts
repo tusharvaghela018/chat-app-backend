@@ -79,10 +79,31 @@ class SocketServer {
                 try {
                     const conversation = await this.conversationRepo.getConversation({ senderId: senderId, receiverId: data.receiverId })
 
+                    // Check if rejected - prevent sender from messaging again
+                    if (conversation.status === 'rejected') {
+                        return socket.emit(CHAT_EVENTS.ERROR, { message: "You cannot send messages to this user." })
+                    }
+
+                    // Determine if the message should be hidden for either party
+                    const isSenderInConv = conversation.sender_id === senderId
+                    const isReceiverInConv = conversation.receiver_id === senderId
+
+                    const otherUserBlockedMe = isSenderInConv ? conversation.blocked_by_receiver : conversation.blocked_by_sender
+                    const iBlockedOtherUser = isSenderInConv ? conversation.blocked_by_sender : conversation.blocked_by_receiver
+
+                    // If OTHER user has blocked ME, the message is hidden for THEM
+                    const isHiddenForOther = otherUserBlockedMe
+                    // If I have blocked OTHER user, the message is hidden for ME (though I'm sending it)
+                    // Actually, if I block someone and I send them a message, I should probably still see my own message.
+                    // But the requirement says "user A blocked user B ... that periods time user A will not seen tat messages".
+                    // This usually refers to messages RECEIVED while having someone blocked.
+                    
                     const message = await this.messageRepo.create({
                         conversation_id: conversation.id,
                         sender_id: senderId,
-                        content: data.content
+                        content: data.content,
+                        is_hidden_for_sender_id: isSenderInConv ? false : isHiddenForOther,
+                        is_hidden_for_receiver_id: isReceiverInConv ? false : isHiddenForOther
                     })
 
                     const { id, content, conversation_id, sender_id, created_at } = message.toJSON()
@@ -96,8 +117,12 @@ class SocketServer {
                         created_at
                     }
 
-                    this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
+                    // Only emit to receiver if they haven't blocked the sender AND they have accepted the request
+                    if (!otherUserBlockedMe && conversation.status === 'accepted') {
+                        this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
+                    }
 
+                    // Always emit back to sender so they see their own message
                     socket.emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
 
                 } catch (error) {
@@ -108,35 +133,69 @@ class SocketServer {
             socket.on(CHAT_EVENTS.MARK_SEEN, async ({ conversationId, senderId: sender_id }) => {
                 const user = socket.data.user;
 
-                await this.messageRepo.update(
+                // Check block status before marking as seen
+                const conversation = await this.conversationRepo.findById(conversationId)
+                if (!conversation) return
+
+                // Do not mark as seen if the request is still pending
+                if (conversation.status === 'pending') return
+
+                const isSender = conversation.sender_id === user.id
+                const iBlockedOther = isSender ? conversation.blocked_by_sender : conversation.blocked_by_receiver
+                const otherBlockedMe = isSender ? conversation.blocked_by_receiver : conversation.blocked_by_sender
+
+                if (iBlockedOther || otherBlockedMe) return
+
+                const filterField = isSender ? 'is_hidden_for_sender_id' : 'is_hidden_for_receiver_id'
+
+                const [_, updatedMessages] = await this.messageRepo.update(
                     { is_seen: true },
                     {
                         where: {
                             conversation_id: conversationId,
                             sender_id: { [Op.ne]: user.id }, // not current user
+                            [filterField]: false
                         },
+                        returning: true
                     }
-                );
+                ) as unknown as [number, any[]];
 
-                // notify sender
+                const updatedIds = updatedMessages.map(m => m.id);
+
+                if (updatedIds.length === 0) return;
+
+                // notify sender only if not blocked
                 this.io.to(`user_${sender_id}`).emit(CHAT_EVENTS.MESSAGES_SEEN, {
                     conversationId,
+                    messageIds: updatedIds
                 });
             });
 
 
-            socket.on(CHAT_EVENTS.TYPING_START, (data: { receiverId: number }) => {
-                this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
-                    senderId,
-                    isTyping: true
-                })
+            socket.on(CHAT_EVENTS.TYPING_START, async (data: { receiverId: number }) => {
+                const conversation = await this.conversationRepo.getConversation({ senderId, receiverId: data.receiverId })
+                const isSender = conversation.sender_id === senderId
+                const otherBlockedMe = isSender ? conversation.blocked_by_receiver : conversation.blocked_by_sender
+                
+                if (!otherBlockedMe) {
+                    this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
+                        senderId,
+                        isTyping: true
+                    })
+                }
             })
 
-            socket.on(CHAT_EVENTS.TYPING_STOP, (data: { receiverId: number }) => {
-                this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
-                    senderId,
-                    isTyping: false
-                })
+            socket.on(CHAT_EVENTS.TYPING_STOP, async (data: { receiverId: number }) => {
+                const conversation = await this.conversationRepo.getConversation({ senderId, receiverId: data.receiverId })
+                const isSender = conversation.sender_id === senderId
+                const otherBlockedMe = isSender ? conversation.blocked_by_receiver : conversation.blocked_by_sender
+
+                if (!otherBlockedMe) {
+                    this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
+                        senderId,
+                        isTyping: false
+                    })
+                }
             })
 
             socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any }) => {
