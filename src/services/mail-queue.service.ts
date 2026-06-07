@@ -16,12 +16,6 @@ class MailQueueService {
             await this.redisClient.connect();
             const client = this.redisClient.getClient();
 
-            // Perform simple health check before pushing
-            const isHealthy = await this.redisClient.isHealthy();
-            if (!isHealthy) {
-                logger.warn("Redis client not healthy, reconnecting before push...");
-            }
-
             await client.rPush(MAIL_QUEUE_KEY, JSON.stringify(job));
             logger.info(`Email pushed to queue: ${job.type}`);
         } catch (error: any) {

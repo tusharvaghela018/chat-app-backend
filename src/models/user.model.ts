@@ -89,6 +89,37 @@ export default class User extends Model<IUser> implements IUser {
     })
     vault_salt: string;
 
+    @Column({
+        type: DataType.BOOLEAN,
+        defaultValue: false,
+        allowNull: true
+    })
+    two_factor_enabled: boolean
+
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    two_factor_secret: string
+
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    two_factor_iv: string
+
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    two_factor_tag: string
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true
+    })
+    two_factor_recovery_codes: string
+
     // 🔐 HASH PASSWORD (CREATE + UPDATE)
     @BeforeCreate
     @BeforeUpdate

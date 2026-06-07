@@ -33,6 +33,12 @@ class AuthRoute implements Routes {
         this.router.get(`${this.path}/google/callback`, this.authMiddleware.passportMiddleware, this.authController.googleCallback)
 
         this.router.get(`${this.path}/me`, this.authMiddleware.authenticate, this.authController.getMe)
+
+        // ─── Two-Factor Authentication (2FA) ──────────────────────────────────
+        this.router.post(`${this.path}/2fa/setup`, this.authMiddleware.authenticate, this.authController.setup2FA);
+        this.router.post(`${this.path}/2fa/verify`, this.authMiddleware.authenticate, this.validationMiddleware.body(authValidation.verify2FA), this.authController.verifyAndEnable2FA);
+        this.router.post(`${this.path}/2fa/disable`, this.authMiddleware.authenticate, this.validationMiddleware.body(authValidation.verify2FA), this.authController.disable2FA);
+        this.router.post(`${this.path}/2fa/login`, this.validationMiddleware.body(authValidation.verifyLogin2FA), this.authController.verifyLogin2FA);
     }
 }
 
