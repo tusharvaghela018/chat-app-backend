@@ -21,4 +21,15 @@ export const authValidation = {
         token: Joi.string().required(),
         password: Joi.string().min(6).required(),
     }),
-    };
+
+    verify2FA: Joi.object({
+        code: Joi.string().min(6).max(10).required(),
+    }),
+
+    verifyLogin2FA: Joi.object({
+        token: Joi.string().required(),
+
+        code: Joi.string(),
+        recovery_code: Joi.string(),
+    }).xor("code", "recovery_code"),
+};

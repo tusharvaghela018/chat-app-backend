@@ -13,8 +13,8 @@ class JwtUtil {
         };
     }
 
-    sign(payload: IJwtPayload): string {
-        return jwt.sign(payload, this.secret, this.options);
+    sign(payload: IJwtPayload, options?: SignOptions): string {
+        return jwt.sign(payload, this.secret, { ...this.options, ...options });
     }
 
     verify(token: string): IJwtPayload {

@@ -23,6 +23,10 @@ class UserRepository extends BaseRepository<User> {
             throw new AppError("User not found with this email", 404);
         }
 
+        if (!user.password && user.google_id) {
+            throw new AppError("This account uses Google Sign-In. Please login with Google instead of using a password.", 400);
+        }
+
         // Generate a JWT token for password reset using the default expiration
         const resetToken = jwtUtil.sign(
             { id: user.id!, email: user.email }
@@ -95,7 +99,7 @@ class UserRepository extends BaseRepository<User> {
     };
 
     // ─── Local Login ──────────────────────────────────────────────────
-    readonly login = async (data: LoginDTO): Promise<{ user: Partial<User>; token: string }> => {
+    readonly login = async (data: LoginDTO): Promise<{ user: Partial<User>; token: string; requires2FA?: boolean }> => {
         const { email, password } = data
         const user = await this.findOne({ where: { email: email } });
 
@@ -114,9 +118,17 @@ class UserRepository extends BaseRepository<User> {
             throw new AppError("Invalid email or password", 401);
         }
 
+        if (user.two_factor_enabled) {
+            const token = jwtUtil.sign(
+                { id: user.id, email: user.email, isPreAuth: true },
+                { expiresIn: "5m" }
+            );
+            return { user: this.sanitize(user), token, requires2FA: true };
+        }
+
         const token = jwtUtil.sign({ id: user.id, email: user.email });
 
-        return { user: this.sanitize(user), token };
+        return { user: this.sanitize(user), token, requires2FA: false };
     };
 
     // ─── Register ─────────────────────────────────────────────────────
