@@ -9,11 +9,18 @@ class EmailService {
         this.transporter = nodemailer.createTransport({
             host: SMTP_HOST,
             port: Number(SMTP_PORT) || 587,
-            secure: Number(SMTP_PORT) === 465, // true for 465, false for other ports
+            secure: Number(SMTP_PORT) === 465, 
             auth: {
                 user: SMTP_USER,
                 pass: SMTP_PASS,
             },
+            tls: {
+                // Do not fail on invalid certs (common in some cloud environments)
+                rejectUnauthorized: false
+            },
+            // Enable logging for debugging production SMTP issues
+            debug: NODE_ENV !== 'production', 
+            logger: true 
         });
 
         // Verify transporter connection

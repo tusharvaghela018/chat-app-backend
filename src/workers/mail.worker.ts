@@ -1,8 +1,9 @@
 import RedisClient from "@/config/Redis";
 import emailService from "@/services/email.service";
 import logger from "@/utils/logger";
+import { NODE_ENV } from "@/config";
 
-const MAIL_QUEUE_KEY = "mail_queue";
+const MAIL_QUEUE_KEY = NODE_ENV === "production" ? "mail_queue_prod" : "mail_queue_dev";
 
 export const startMailWorker = async () => {
     const redisClient = RedisClient.getInstance();
