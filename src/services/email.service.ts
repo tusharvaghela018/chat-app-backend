@@ -35,10 +35,16 @@ class EmailService {
 
     public async verifyConnection() {
         try {
-            await this.transporter.verify();
+            // Create a timeout promise
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("SMTP Connection Timeout")), 10000)
+            );
+
+            // Race the verify call against the timeout
+            await Promise.race([this.transporter.verify(), timeout]);
             return true;
         } catch (error) {
-            logger.error(error)
+            logger.error("Email verification failed:", error)
             return false;
         }
     }
