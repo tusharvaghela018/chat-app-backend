@@ -14,8 +14,18 @@ class MessageController {
     readonly getMessages = asyncHandler(async (req: Request, res: Response) => {
         const senderId = (req.user as User).id
         const receiverId = Number(req.params.receiverId)
-        const messages = await this.messageRepo.getAllMessages(senderId, receiverId)
-        return sendResponse({ res, data: messages })
+        const before = req.query.before ? Number(req.query.before) : undefined
+        const limit = req.query.limit ? Number(req.query.limit) : 50
+
+        const messages = await this.messageRepo.getMessages(senderId, receiverId, limit, before)
+
+        return sendResponse({
+            res,
+            data: {
+                messages,
+                hasMore: messages.length === limit
+            }
+        })
     })
 }
 

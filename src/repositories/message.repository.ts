@@ -8,7 +8,7 @@ class MessageRepository extends BaseRepository<Message> {
         super(Message)
     }
 
-    readonly getAllMessages = async (senderId: number, receiverId: number) => {
+    readonly getMessages = async (senderId: number, receiverId: number, limit: number = 50, before?: number) => {
 
         const conversation = await Conversation.findOne({
             where: {
@@ -22,7 +22,7 @@ class MessageRepository extends BaseRepository<Message> {
         })
 
         if (!conversation) {
-            return;
+            return [];
         }
 
         // 🔒 Pending Request Privacy:
@@ -34,13 +34,20 @@ class MessageRepository extends BaseRepository<Message> {
         const isSender = conversation.sender_id === senderId
         const filterField = isSender ? 'is_hidden_for_sender_id' : 'is_hidden_for_receiver_id'
 
+        const whereClause: any = {
+            conversation_id: conversation?.id,
+            [filterField]: false
+        }
+
+        if (before) {
+            whereClause.id = { [Op.lt]: before }
+        }
+
         return await this.findAll({
-            where: {
-                conversation_id: conversation?.id,
-                [filterField]: false
-            },
-            order: [["created_at", "ASC"]]
-        })
+            where: whereClause,
+            limit,
+            order: [["id", "DESC"]],
+        }).then(messages => messages.reverse())
     }
 }
 
