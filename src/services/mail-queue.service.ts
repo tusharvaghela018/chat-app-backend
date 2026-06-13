@@ -1,8 +1,5 @@
-import RedisClient from "@/config/Redis";
+import { mailQueue } from "@/shared/queues/mail.queue";
 import logger from "@/utils/logger";
-import { NODE_ENV } from "@/config";
-
-const MAIL_QUEUE_KEY = NODE_ENV === "production" ? "mail_queue_prod" : "mail_queue_dev";
 
 export interface MailJob {
     type: "password-reset";
@@ -10,34 +7,20 @@ export interface MailJob {
 }
 
 class MailQueueService {
-    private redisClient = RedisClient.getInstance();
-
-    public async push(job: MailJob, retryCount = 0) {
+    public async push(job: MailJob) {
         try {
-            await this.redisClient.connect();
-            const client = this.redisClient.getClient();
-
-            await client.rPush(MAIL_QUEUE_KEY, JSON.stringify(job));
-            logger.info(`Email pushed to queue: ${job.type}`);
+            await mailQueue.add(job.type, job.data);
+            logger.info(`Email added to BullMQ: ${job.type}`);
         } catch (error: any) {
-            logger.error(`Error pushing to mail queue (Attempt ${retryCount + 1}):`, error.message);
-
-            // Retry once for ECONNRESET or other transient network errors
-            if (retryCount < 1 && (error.code === 'ECONNRESET' || error.message.includes('closed'))) {
-                logger.info("Retrying push to mail queue...");
-                await new Promise(resolve => setTimeout(resolve, 500));
-                return this.push(job, retryCount + 1);
-            }
-
+            logger.error(`Error adding to mail queue:`, error.message);
             throw error;
         }
     }
 
     public async getQueueLength(): Promise<number> {
         try {
-            await this.redisClient.connect();
-            const client = this.redisClient.getClient();
-            return await client.lLen(MAIL_QUEUE_KEY);
+            const counts = await mailQueue.getJobCounts();
+            return counts.waiting + counts.active + counts.delayed;
         } catch (error) {
             logger.error(error)
             return -1;

@@ -1,61 +1,47 @@
-import RedisClient from "@/config/Redis";
+import { Worker, Job } from "bullmq";
 import emailService from "@/services/email.service";
 import logger from "@/utils/logger";
-import { NODE_ENV } from "@/config";
+import { REDIS_URL } from "@/config";
+import { MAIL_QUEUE_NAME } from "@/shared/queues/mail.queue";
 
-const MAIL_QUEUE_KEY = NODE_ENV === "production" ? "mail_queue_prod" : "mail_queue_dev";
+const connection = {
+  url: REDIS_URL,
+  tls: REDIS_URL?.startsWith('rediss://') ? {} : undefined
+};
 
-export const startMailWorker = async () => {
-    const redisClient = RedisClient.getInstance();
-    
-    try {
-        await redisClient.connect();
-        const client = redisClient.getClient();
-        
-        logger.info("Mail worker started and waiting for jobs...");
+export const startMailWorker = () => {
+  const worker = new Worker(
+    MAIL_QUEUE_NAME,
+    async (job: Job) => {
+      logger.info(`Processing mail job: ${job.name} (ID: ${job.id})`);
 
-        while (true) {
-            try {
-                // Perform simple health check to ensure connection is still alive
-                const isHealthy = await redisClient.isHealthy();
-                if (!isHealthy) {
-                    logger.warn("Redis client not healthy in worker, waiting for reconnect...");
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                    continue;
-                }
-
-                // Use 30s timeout instead of 0 to prevent some cloud providers from dropping idle connections
-                const result = await client.blPop(MAIL_QUEUE_KEY, 30);
-                
-                if (result) {
-                    const { element } = result;
-                    const job = JSON.parse(element);
-                    
-                    logger.info(`Processing mail job: ${job.type}`);
-                    
-                    switch (job.type) {
-                        case 'password-reset':
-                            await emailService.sendPasswordResetEmail(job.data.email, job.data.token);
-                            break;
-                        default:
-                            logger.warn(`Unknown mail job type: ${job.type}`);
-                    }
-                    
-                    logger.info(`Successfully processed mail job: ${job.type}`);
-                }
-            } catch (innerError: any) {
-                // If it's a timeout error or connection reset, just log and continue
-                if (innerError.message.includes('ECONNRESET') || innerError.message.includes('closed')) {
-                    logger.warn("Redis connection reset or closed in worker, will retry...");
-                } else {
-                    logger.error("Error processing mail job:", innerError);
-                }
-                
-                // Wait for potential automatic reconnection
-                await new Promise(resolve => setTimeout(resolve, 5000));
-            }
+      try {
+        switch (job.name) {
+          case "password-reset":
+            await emailService.sendPasswordResetEmail(job.data.email, job.data.token);
+            break;
+          default:
+            logger.warn(`Unknown mail job type: ${job.name}`);
         }
-    } catch (error) {
-        logger.error("Failed to start mail worker loop:", error);
+        logger.info(`Successfully processed mail job: ${job.name}`);
+      } catch (error) {
+        logger.error(`Failed to process mail job ${job.name}:`, error);
+        throw error; // Rethrow to trigger BullMQ retry
+      }
+    },
+    { 
+        connection,
+        concurrency: 5 // Process up to 5 emails in parallel
     }
+  );
+
+  worker.on("completed", (job) => {
+    logger.info(`Job ${job.id} has completed!`);
+  });
+
+  worker.on("failed", (job, err) => {
+    logger.error(`Job ${job?.id} has failed with ${err.message}`);
+  });
+
+  logger.info("BullMQ Mail worker started...");
 };
