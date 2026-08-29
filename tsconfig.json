@@ -9,26 +9,24 @@
     "target": "ES2022",
     "useDefineForClassFields": false,
     "module": "commonjs",
-    "rootDir": "src",
+    "rootDir": "./src",
     "outDir": "./dist",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": true,
     "emitDecoratorMetadata": true,
     "paths": {
       "@/*": [
-        "src/*"
+        "./src/*"
       ]
     },
     "typeRoots": [
       "./node_modules/@types"
-    ],
+    ]
   },
   "include": [
-    "src/**/*"
+    "./src/**/*"
   ]
 }
