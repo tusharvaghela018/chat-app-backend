@@ -29,6 +29,7 @@ class AuthRoute implements Routes {
         this.router.get(`${this.path}/google`, passport.authenticate("google", {
             scope: ["profile", "email"],
             session: false,
+            prompt: "select_account"
         }))
         this.router.get(`${this.path}/google/callback`, this.authMiddleware.passportMiddleware, this.authController.googleCallback)
 

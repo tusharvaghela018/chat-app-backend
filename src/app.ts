@@ -85,10 +85,50 @@ class App {
         routes.forEach(route => {
             this.app.use("/", route.router);
         });
-        // ✅ Root route
-        this.app.get("/", (req: Request, res: Response) => {
-            res.status(200).send("🚀 Server is running");
-        });
+        // ✅ Root route & Health check (pings database so Supabase doesn't pause & keeps Render awake)
+        const healthCheckHandler = async (req: Request, res: Response) => {
+            try {
+                // Check & keep database connection active for Supabase
+                await db.authenticate();
+
+                // Check Redis connection health
+                const isRedisHealthy = await RedisClient.getInstance()
+                    .isHealthy()
+                    .catch(() => false);
+
+                return sendResponse({
+                    res,
+                    statusCode: 200,
+                    success: true,
+                    message: "🚀 Server is running and database is connected",
+                    data: {
+                        status: "healthy",
+                        database: "connected",
+                        redis: isRedisHealthy ? "connected" : "disconnected",
+                        uptime: `${Math.floor(process.uptime())}s`,
+                        timestamp: new Date().toISOString(),
+                    },
+                });
+            } catch (error: any) {
+                logger.error("Database health check failed on root route:", error);
+
+                return sendResponse({
+                    res,
+                    statusCode: 503,
+                    success: false,
+                    message: "Server is running, but database connection check failed",
+                    data: {
+                        status: "unhealthy",
+                        database: "disconnected",
+                        timestamp: new Date().toISOString(),
+                    },
+                    error: error?.message || "Database connection error",
+                });
+            }
+        };
+
+        this.app.get("/", healthCheckHandler);
+        this.app.get("/health", healthCheckHandler);
 
         // 404 handler — unknown routes
         this.app.use((req: Request, res: Response, next: NextFunction) => {
