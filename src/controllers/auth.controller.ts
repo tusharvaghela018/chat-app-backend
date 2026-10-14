@@ -1,7 +1,7 @@
 import { FRONTEND_URL } from "@/config";
 import User from "@/models/user.model";
 import UserRepository from "@/repositories/user.repository";
-import asyncHandler, { sendResponse } from "@/utils";
+import asyncHandler, { sendResponse, setAuthCookie } from "@/utils";
 import AppError from "@/utils/appError";
 import jwtUtil from "@/utils/jwt.util";
 import type { Request, Response } from "express";
@@ -50,12 +50,25 @@ class AuthController {
             })
         }
 
-        return sendResponse({ res, message: "Logeed in successfully", data: { user, token }, show_toast: true })
+        return sendResponse({
+            res,
+            message: "Logged in successfully",
+            data: { user },
+            auth_token: token,
+            show_toast: true
+        });
     });
 
     public register = asyncHandler(async (req: Request, res: Response) => {
         const { user, token } = await this.userRepo.register(req.body)
-        return sendResponse({ res, data: { user, token }, message: "Signup successfully", show_toast: true })
+
+        return sendResponse({
+            res,
+            data: { user },
+            message: "Signup successfully",
+            auth_token: token,
+            show_toast: true
+        });
     })
 
     public forgotPassword = asyncHandler(async (req: Request, res: Response) => {
@@ -80,7 +93,9 @@ class AuthController {
         }
 
         const token = jwtUtil.sign({ id: user.id, email: user.email });
-        res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
+        setAuthCookie(res, token);
+
+        res.redirect(`${FRONTEND_URL}/auth/callback`);
     });
 
     public verifyLogin2FA = asyncHandler(async (req: Request, res: Response) => {
@@ -152,9 +167,9 @@ class AuthController {
                 res,
                 message: "Logged in successfully",
                 data: {
-                    user: (this.userRepo as any).sanitize(user),
-                    token: accessToken
+                    user: (this.userRepo as any).sanitize(user)
                 },
+                auth_token: accessToken,
                 show_toast: true
             });
 
@@ -308,6 +323,16 @@ class AuthController {
         return sendResponse({
             res,
             message: "Two-factor authentication disabled successfully",
+            show_toast: true
+        });
+    });
+
+    public logout = asyncHandler(async (req: Request, res: Response) => {
+        return sendResponse({
+            res,
+            message: "Logged out successfully",
+            data: null,
+            clearAuthToken: true,
             show_toast: true
         });
     });

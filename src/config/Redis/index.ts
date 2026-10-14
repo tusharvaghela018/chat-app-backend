@@ -1,5 +1,5 @@
 import { createClient, RedisClientType } from "redis";
-import { REDIS_URL } from "@/config";
+import { NODE_ENV, REDIS_URL } from "@/config";
 import logger from "@/utils/logger";
 
 class RedisClient {
@@ -9,14 +9,14 @@ class RedisClient {
     private constructor() {
         this.client = createClient({
             url: REDIS_URL,
-            socket: {
-                tls: true, // 🔥 REQUIRED for Upstash
-                reconnectStrategy: (retries) => {
-                    console.log(`Redis reconnect attempt: ${retries}`);
-                    // Exponential backoff with a cap of 10s
-                    return Math.min(retries * 100, 10000);
-                },
-            },
+            socket: (NODE_ENV !== 'development'
+                ? {
+                    tls: true,
+                    reconnectStrategy: (retries: number) => Math.min(retries * 100, 10000),
+                }
+                : {
+                    reconnectStrategy: (retries: number) => Math.min(retries * 100, 10000),
+                }) as any,
         });
 
         this.client.on("connect", () => {

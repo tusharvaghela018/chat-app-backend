@@ -1,9 +1,22 @@
+import { Request } from "express";
 import passport from "passport";
 import { Strategy as JwtStrategy, ExtractJwt, StrategyOptions } from "passport-jwt";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { GOOGLE_CALLBACK_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, JWT_SECRET } from "@/config";
 import { IJwtPayload } from "@/types/models/user.interface";
 import UserRepository from "@/repositories/user.repository";
+import { decryptToken } from "@/utils/encrypt";
+
+const cookieExtractor = (req: Request): string | null => {
+    let token: string | null = null;
+    if (req && req.cookies) {
+        const rawCookie = req.cookies.auth_token || req.cookies.token;
+        if (rawCookie) {
+            token = decryptToken(rawCookie) || rawCookie;
+        }
+    }
+    return token;
+};
 
 class PassportConfig {
 
@@ -17,7 +30,9 @@ class PassportConfig {
 
     private initJwtStrategy(): void {
         const options: StrategyOptions = {
-            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            jwtFromRequest: ExtractJwt.fromExtractors([
+                cookieExtractor
+            ]),
             secretOrKey: JWT_SECRET
         }
 

@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from "express";
 import http from "http";
 import expressWinston from "express-winston";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { Routes } from "@/types/general/route.interface";
 import { NODE_ENV, PORT } from "@/config";
 import logger from "@/utils/logger";
@@ -57,6 +58,7 @@ class App {
                 credentials: true,
             }),
         );
+        this.app.use(cookieParser());
         //log for the incoming http request at info level.
         this.app.use(
             expressWinston.logger({

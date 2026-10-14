@@ -44,3 +44,29 @@ export const dcrypt = (data: DcryptPayload) => {
 
     return decrypted;
 }
+
+/**
+ * Encrypt a JWT token into a compact string format: iv.tag.encrypted
+ */
+export const encryptToken = (token: string): string => {
+    const { encrypted, iv, tag } = encrypt(token);
+    return `${iv}.${tag}.${encrypted}`;
+};
+
+/**
+ * Decrypt a token from cookie string format: iv.tag.encrypted
+ * Returns null if invalid, corrupted, or tampered
+ */
+export const decryptToken = (encryptedToken: string): string | null => {
+    try {
+        if (!encryptedToken || typeof encryptedToken !== "string") return null;
+        const parts = encryptedToken.split(".");
+        if (parts.length !== 3) return null;
+        const [iv, tag, encrypted] = parts;
+        if (!iv || !tag || !encrypted) return null;
+
+        return dcrypt({ encrypted, iv, tag });
+    } catch {
+        return null;
+    }
+};

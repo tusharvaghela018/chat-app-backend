@@ -1,5 +1,43 @@
 import { NODE_ENV } from "@/config";
-import { Response } from "express";
+import { CookieOptions, Response } from "express";
+import { encryptToken } from "@/utils/encrypt";
+
+export const getAuthCookieOptions = (): CookieOptions => ({
+    httpOnly: true,
+    secure: NODE_ENV === "production",
+    sameSite: (NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+});
+
+export const setAuthCookie = (res: Response, token: string): void => {
+    const encryptedToken = encryptToken(token);
+    res.cookie("auth_token", encryptedToken, getAuthCookieOptions());
+};
+
+export const clearAuthCookie = (res: Response): void => {
+    res.clearCookie("auth_token", getAuthCookieOptions());
+};
+
+export interface ISendResponseCookie {
+    name: string;
+    value: string;
+    options?: CookieOptions;
+    encrypt?: boolean;
+}
+
+export interface SendResponseParams {
+    res: Response;
+    statusCode?: number;
+    success?: boolean;
+    message?: string;
+    data?: any;
+    error?: any;
+    show_toast?: boolean;
+    auth_token?: string;
+    clearAuthToken?: boolean;
+    cookies?: ISendResponseCookie | ISendResponseCookie[];
+    clearCookies?: string | string[];
+}
 
 export const sendResponse = ({
     res,
@@ -8,16 +46,39 @@ export const sendResponse = ({
     message = "",
     data = null,
     error = null,
-    show_toast = false
-}: {
-    res: Response;
-    statusCode?: number;
-    success?: boolean;
-    message?: string;
-    data?: any;
-    error?: any;
-    show_toast?: boolean
-}) => {
+    show_toast = false,
+    auth_token,
+    clearAuthToken,
+    cookies,
+    clearCookies
+}: SendResponseParams) => {
+    // 1. Handle auth_token if provided
+    if (auth_token) {
+        setAuthCookie(res, auth_token);
+    }
+
+    // 2. Handle clearAuthToken if requested
+    if (clearAuthToken) {
+        clearAuthCookie(res);
+    }
+
+    // 3. Handle custom cookies if provided
+    if (cookies) {
+        const cookieList = Array.isArray(cookies) ? cookies : [cookies];
+        cookieList.forEach(c => {
+            const val = c.encrypt ? encryptToken(c.value) : c.value;
+            res.cookie(c.name, val, c.options || getAuthCookieOptions());
+        });
+    }
+
+    // 4. Handle clearing custom cookies if provided
+    if (clearCookies) {
+        const clearList = Array.isArray(clearCookies) ? clearCookies : [clearCookies];
+        clearList.forEach(name => {
+            res.clearCookie(name, getAuthCookieOptions());
+        });
+    }
+
     return res.status(statusCode).json({
         success,
         message,

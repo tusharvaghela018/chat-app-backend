@@ -3,6 +3,7 @@ import User from "@/models/user.model";
 import ConversationRepository from "@/repositories/conversation.repository";
 import MessageRepository from "@/repositories/message.repository";
 import jwtUtil from "@/utils/jwt.util";
+import { decryptToken } from "@/utils/encrypt";
 import { Server as HttpServer } from "http";
 import { Op } from "sequelize";
 import { Server, Socket } from "socket.io";
@@ -31,15 +32,29 @@ class SocketServer {
     public initialize(server: HttpServer) {
         this.io = new Server(server, {
             cors: {
-                origin: "*",
+                origin: true,
                 credentials: true,
             },
         });
 
         this.io.use(async (socket, next) => {
             try {
-                const token = socket.handshake.auth?.token ||
-                    socket.handshake.headers.authorization?.split(" ")[1]
+                let token: string | null = null;
+
+                // Extract and decrypt token strictly from cookie
+                if (socket.handshake.headers.cookie) {
+                    const cookieHeader = socket.handshake.headers.cookie;
+                    const cookies = cookieHeader.split(";").reduce((acc: Record<string, string>, curr) => {
+                        const [key, ...vals] = curr.trim().split("=");
+                        if (key && vals.length) acc[key] = decodeURIComponent(vals.join("="));
+                        return acc;
+                    }, {});
+
+                    const rawCookie = cookies.auth_token || cookies.token;
+                    if (rawCookie) {
+                        token = decryptToken(rawCookie) || rawCookie;
+                    }
+                }
 
                 if (!token) {
                     return next(new Error("No Token provided"))
@@ -47,10 +62,10 @@ class SocketServer {
 
                 const payLoad = jwtUtil.verify(token)
                 const user = await User.findByPk(payLoad.id)
+                if (!user) return next(new Error("User Not Found"))
+
                 const plainUser = user.toJSON()
                 delete plainUser.password
-
-                if (!plainUser) return next(new Error("User Not Found"))
 
                 socket.data.user = plainUser;
                 next()
