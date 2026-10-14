@@ -51,6 +51,7 @@ class App {
     };
 
     private initializeMiddleware = () => {
+        this.app.set("trust proxy", 1);
         this.app.set("view engine", "ejs");
         this.app.use(
             cors({

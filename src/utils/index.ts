@@ -1,13 +1,20 @@
-import { NODE_ENV } from "@/config";
+import { FRONTEND_URL, NODE_ENV } from "@/config";
 import { CookieOptions, Response } from "express";
 import { encryptToken } from "@/utils/encrypt";
 
-export const getAuthCookieOptions = (): CookieOptions => ({
-    httpOnly: true,
-    secure: NODE_ENV === "production",
-    sameSite: (NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-});
+export const getAuthCookieOptions = (): CookieOptions => {
+    const rawEnv = (process.env.NODE_ENV || NODE_ENV || "").replace(/['"]/g, "").trim().toLowerCase();
+    const isHttps = rawEnv === "production" || !!FRONTEND_URL?.startsWith("https");
+
+    return {
+        httpOnly: true,
+        secure: isHttps,
+        sameSite: (isHttps ? "none" : "lax") as "none" | "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        ...(isHttps ? { partitioned: true } : {})
+    };
+};
 
 export const setAuthCookie = (res: Response, token: string): void => {
     const encryptedToken = encryptToken(token);
