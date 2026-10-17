@@ -4,7 +4,7 @@ import expressWinston from "express-winston";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { Routes } from "@/types/general/route.interface";
-import { NODE_ENV, PORT } from "@/config";
+import { FRONTEND_URL, NODE_ENV, PORT } from "@/config";
 import logger from "@/utils/logger";
 import db from "@/models";
 import RedisClient from "@/config/Redis";
@@ -53,9 +53,31 @@ class App {
     private initializeMiddleware = () => {
         this.app.set("trust proxy", 1);
         this.app.set("view engine", "ejs");
+
+        const formattedFrontendUrl = FRONTEND_URL?.replace(/\/+$/, "");
+        const allowedOrigins = [
+            formattedFrontendUrl,
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ].filter(Boolean) as string[];
+
         this.app.use(
             cors({
-                origin: true,
+                origin: (requestOrigin, callback) => {
+                    // Allow server-to-server or non-browser tools (curl, postman)
+                    if (!requestOrigin) return callback(null, true);
+
+                    const cleanOrigin = requestOrigin.replace(/\/+$/, "");
+                    const isAllowed =
+                        allowedOrigins.includes(cleanOrigin) ||
+                        cleanOrigin.endsWith(".vercel.app") ||
+                        cleanOrigin.startsWith("http://localhost:");
+
+                    if (isAllowed) {
+                        return callback(null, true);
+                    }
+                    return callback(new Error(`Origin ${requestOrigin} not allowed by CORS`));
+                },
                 credentials: true,
             }),
         );

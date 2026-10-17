@@ -3,7 +3,17 @@ import { ENCRYPTION_SECRET } from "@/config";
 import { DcryptPayload } from "@/types/general/crypto.interface";
 
 const ALGORITHM = "aes-256-gcm";
-const SECRET_KEY = Buffer.from(ENCRYPTION_SECRET, 'hex');
+const rawSecret = (ENCRYPTION_SECRET || process.env.ENCRYPTION_SECRET || "").replace(/['"]/g, "").trim();
+
+if (!rawSecret) {
+    throw new Error("ENCRYPTION_SECRET environment variable is required");
+}
+
+const SECRET_KEY = Buffer.from(rawSecret, 'hex');
+
+if (SECRET_KEY.length !== 32) {
+    throw new Error("ENCRYPTION_SECRET must be a 64-character hex string (32 bytes for AES-256)");
+}
 
 export const encrypt = (value: string) => {
     const iv = crypto.randomBytes(16);

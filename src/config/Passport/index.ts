@@ -7,10 +7,23 @@ import { IJwtPayload } from "@/types/models/user.interface";
 import UserRepository from "@/repositories/user.repository";
 import { decryptToken } from "@/utils/encrypt";
 
+const parseCookieHeader = (cookieHeader?: string): Record<string, string> => {
+    if (!cookieHeader) return {};
+    return cookieHeader.split(";").reduce((acc, str) => {
+        const [k, ...v] = str.trim().split("=");
+        if (k) acc[k] = decodeURIComponent(v.join("="));
+        return acc;
+    }, {} as Record<string, string>);
+};
+
 const cookieExtractor = (req: Request): string | null => {
     let token: string | null = null;
-    if (req && req.cookies) {
-        const rawCookie = req.cookies.auth_token || req.cookies.token;
+    if (req) {
+        const cookies = req.cookies && Object.keys(req.cookies).length > 0
+            ? req.cookies
+            : parseCookieHeader(req.headers?.cookie);
+
+        const rawCookie = cookies?.auth_token || cookies?.token;
         if (rawCookie) {
             token = decryptToken(rawCookie) || rawCookie;
         }

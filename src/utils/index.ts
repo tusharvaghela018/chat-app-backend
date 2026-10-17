@@ -2,9 +2,15 @@ import { FRONTEND_URL, NODE_ENV } from "@/config";
 import { CookieOptions, Response } from "express";
 import { encryptToken } from "@/utils/encrypt";
 
-export const getAuthCookieOptions = (): CookieOptions => {
+export const getAuthCookieOptions = (res?: Response): CookieOptions => {
     const rawEnv = (process.env.NODE_ENV || NODE_ENV || "").replace(/['"]/g, "").trim().toLowerCase();
-    const isHttps = rawEnv === "production" || !!FRONTEND_URL?.startsWith("https");
+    const req = res?.req;
+
+    const isHttps =
+        rawEnv === "production" ||
+        req?.secure === true ||
+        req?.headers?.["x-forwarded-proto"] === "https" ||
+        Boolean(FRONTEND_URL?.startsWith("https"));
 
     return {
         httpOnly: true,
@@ -18,11 +24,11 @@ export const getAuthCookieOptions = (): CookieOptions => {
 
 export const setAuthCookie = (res: Response, token: string): void => {
     const encryptedToken = encryptToken(token);
-    res.cookie("auth_token", encryptedToken, getAuthCookieOptions());
+    res.cookie("auth_token", encryptedToken, getAuthCookieOptions(res));
 };
 
 export const clearAuthCookie = (res: Response): void => {
-    res.clearCookie("auth_token", getAuthCookieOptions());
+    res.clearCookie("auth_token", getAuthCookieOptions(res));
 };
 
 export interface ISendResponseCookie {
@@ -74,7 +80,7 @@ export const sendResponse = ({
         const cookieList = Array.isArray(cookies) ? cookies : [cookies];
         cookieList.forEach(c => {
             const val = c.encrypt ? encryptToken(c.value) : c.value;
-            res.cookie(c.name, val, c.options || getAuthCookieOptions());
+            res.cookie(c.name, val, c.options || getAuthCookieOptions(res));
         });
     }
 
@@ -82,7 +88,7 @@ export const sendResponse = ({
     if (clearCookies) {
         const clearList = Array.isArray(clearCookies) ? clearCookies : [clearCookies];
         clearList.forEach(name => {
-            res.clearCookie(name, getAuthCookieOptions());
+            res.clearCookie(name, getAuthCookieOptions(res));
         });
     }
 
