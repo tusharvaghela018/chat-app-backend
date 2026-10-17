@@ -6,9 +6,7 @@ import AppError from "@/utils/appError";
 import jwtUtil from "@/utils/jwt.util";
 import type { Request, Response } from "express";
 
-import mailQueueService from "@/services/mail-queue.service";
 import emailService from "@/services/email.service";
-import RedisClient from "@/config/Redis";
 import TwoFactorService from "@/services/2fa.service";
 import bcrypt from "bcrypt";
 
@@ -22,17 +20,14 @@ class AuthController {
     }
 
     public getMailStatus = asyncHandler(async (req: Request, res: Response) => {
-        const redisHealthy = await RedisClient.getInstance().isHealthy();
-        const smtpHealthy = await emailService.verifyConnection();
-        const queueLength = await mailQueueService.getQueueLength();
+        const brevoConfigured = await emailService.verifyConnection();
 
         return sendResponse({
             res,
             message: "Mail System Status",
             data: {
-                redis: redisHealthy ? "Connected" : "Disconnected",
-                smtp: smtpHealthy ? "Ready" : "Error",
-                pending_emails: queueLength,
+                provider: "Brevo API",
+                status: brevoConfigured ? "Ready" : "Missing API Key",
                 env: process.env.NODE_ENV || "development"
             }
         });

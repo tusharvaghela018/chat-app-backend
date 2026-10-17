@@ -7,12 +7,10 @@ import { Routes } from "@/types/general/route.interface";
 import { FRONTEND_URL, NODE_ENV, PORT } from "@/config";
 import logger from "@/utils/logger";
 import db from "@/models";
-import RedisClient from "@/config/Redis";
 import SocketServer from "@/config/Socket";
 import PassportConfig from "@/config/Passport";
 import AppError from "@/utils/appError";
 import { sendResponse } from "@/utils";
-import { startMailWorker } from "@/workers/mail.worker";
 
 class App {
     public app: express.Application;
@@ -45,9 +43,6 @@ class App {
             console.info(`=================================`);
         });
         await this.connectToDB();
-        await this.connectRedis();
-        // Start background worker
-        startMailWorker();
     };
 
     private initializeMiddleware = () => {
@@ -116,11 +111,6 @@ class App {
                 // Check & keep database connection active for Supabase
                 await db.authenticate();
 
-                // Check Redis connection health
-                const isRedisHealthy = await RedisClient.getInstance()
-                    .isHealthy()
-                    .catch(() => false);
-
                 return sendResponse({
                     res,
                     statusCode: 200,
@@ -129,7 +119,6 @@ class App {
                     data: {
                         status: "healthy",
                         database: "connected",
-                        redis: isRedisHealthy ? "connected" : "disconnected",
                         uptime: `${Math.floor(process.uptime())}s`,
                         timestamp: new Date().toISOString(),
                     },
@@ -178,10 +167,6 @@ class App {
         }
     };
 
-    private connectRedis = async () => {
-        const redis = RedisClient.getInstance();
-        await redis.connect();
-    }
 
     private initializeErrorHandling = () => {
         this.app.use((err: any, _: Request, res: Response, _next: NextFunction) => {
