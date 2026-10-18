@@ -6,10 +6,21 @@ export const getAuthCookieOptions = (res?: Response): CookieOptions => {
     const rawEnv = (process.env.NODE_ENV || NODE_ENV || "").replace(/['"]/g, "").trim().toLowerCase();
     const req = res?.req;
 
+    const forwardedProto = req?.headers?.["x-forwarded-proto"];
+    const isForwardedHttps = typeof forwardedProto === "string" && forwardedProto.includes("https");
+
+    const origin = (req?.headers?.origin || req?.headers?.referer || "") as string;
+    const isOriginHttps = typeof origin === "string" && origin.startsWith("https://");
+
+    const host = (req?.headers?.host || "") as string;
+    const isCloudHost = Boolean(host && !host.includes("localhost") && !host.includes("127.0.0.1"));
+
     const isHttps =
         rawEnv === "production" ||
         req?.secure === true ||
-        req?.headers?.["x-forwarded-proto"] === "https" ||
+        isForwardedHttps ||
+        isOriginHttps ||
+        isCloudHost ||
         Boolean(FRONTEND_URL?.startsWith("https"));
 
     return {

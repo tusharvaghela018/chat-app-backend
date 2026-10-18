@@ -19,11 +19,13 @@ const parseCookieHeader = (cookieHeader?: string): Record<string, string> => {
 const cookieExtractor = (req: Request): string | null => {
     let token: string | null = null;
     if (req) {
-        const cookies = req.cookies && Object.keys(req.cookies).length > 0
-            ? req.cookies
-            : parseCookieHeader(req.headers?.cookie);
+        const parsedHeader = parseCookieHeader(req.headers?.cookie);
+        const rawCookie =
+            req.cookies?.auth_token ||
+            req.cookies?.token ||
+            parsedHeader.auth_token ||
+            parsedHeader.token;
 
-        const rawCookie = cookies?.auth_token || cookies?.token;
         if (rawCookie) {
             token = decryptToken(rawCookie) || rawCookie;
         }
