@@ -39,10 +39,10 @@ class SocketServer {
 
         this.io.use(async (socket, next) => {
             try {
-                let token: string | null = null;
+                let token: string | null = (socket.handshake.auth?.token as string) || (socket.handshake.query?.token as string) || null;
 
-                // Extract and decrypt token strictly from cookie
-                if (socket.handshake.headers.cookie) {
+                // If not provided in handshake auth, extract and decrypt token from cookie
+                if (!token && socket.handshake.headers.cookie) {
                     const cookieHeader = socket.handshake.headers.cookie;
                     const cookies = cookieHeader.split(";").reduce((acc: Record<string, string>, curr) => {
                         const [key, ...vals] = curr.trim().split("=");

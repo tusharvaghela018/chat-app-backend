@@ -24,6 +24,7 @@ class AuthRoute implements Routes {
         this.router.post(`${this.path}/register`, this.validationMiddleware.body(authValidation.register), this.authController.register)
         this.router.post(`${this.path}/forgot-password`, this.validationMiddleware.body(authValidation.forgotPassword), this.authController.forgotPassword);
         this.router.post(`${this.path}/reset-password`, this.validationMiddleware.body(authValidation.resetPassword), this.authController.resetPassword);
+        this.router.post(`${this.path}/exchange`, this.authController.exchangeToken);
         this.router.post(`${this.path}/logout`, this.authController.logout);
 
         // ─── Google OAuth ─────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ class AuthRoute implements Routes {
         this.router.get(`${this.path}/google/callback`, this.authMiddleware.passportMiddleware, this.authController.googleCallback)
 
         this.router.get(`${this.path}/me`, this.authMiddleware.authenticate, this.authController.getMe);
+        this.router.get(`${this.path}/socket-token`, this.authMiddleware.authenticate, this.authController.getSocketToken);
 
         // ─── Two-Factor Authentication (2FA) ──────────────────────────────────
         this.router.post(`${this.path}/2fa/setup`, this.authMiddleware.authenticate, this.authController.setup2FA);

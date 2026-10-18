@@ -90,7 +90,7 @@ class AuthController {
         const token = jwtUtil.sign({ id: user.id, email: user.email });
         setAuthCookie(res, token);
 
-        res.redirect(`${FRONTEND_URL}/auth/callback`);
+        res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
     });
 
     public verifyLogin2FA = asyncHandler(async (req: Request, res: Response) => {
@@ -319,6 +319,33 @@ class AuthController {
             res,
             message: "Two-factor authentication disabled successfully",
             show_toast: true
+        });
+    });
+
+    public getSocketToken = asyncHandler(async (req: Request, res: Response) => {
+        const user = req.user as User;
+        const token = jwtUtil.sign({ id: user.id, email: user.email }, { expiresIn: "10m" });
+        return sendResponse({
+            res,
+            data: { token },
+            message: "Socket token generated",
+            show_toast: false
+        });
+    });
+
+    public exchangeToken = asyncHandler(async (req: Request, res: Response) => {
+        const { token } = req.body;
+        if (!token) throw new AppError("Token is required", 400);
+        const decoded = jwtUtil.verify(token);
+        const user = await this.userRepo.findById(decoded.id);
+        if (!user) throw new AppError("User not found", 404);
+
+        return sendResponse({
+            res,
+            data: { user: (this.userRepo as any).sanitize(user) },
+            message: "Cookie established",
+            auth_token: token,
+            show_toast: false
         });
     });
 
