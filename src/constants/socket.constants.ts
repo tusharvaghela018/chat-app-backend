@@ -12,7 +12,9 @@ export const CHAT_EVENTS = {
     TYPING_START: "typing_start",    // ← add
     TYPING_STOP: "typing_stop",     // ← add
     TYPING: "typing",
-    ERROR: "error"
+    ERROR: "error",
+    CONVERSATION_STATUS_UPDATED: "conversation_status_updated",
+    NEW_REQUEST: "new_request",
 } as const
 
 export const GROUP_EVENTS = {

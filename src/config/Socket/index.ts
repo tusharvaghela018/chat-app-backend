@@ -132,9 +132,16 @@ class SocketServer {
                         created_at
                     }
 
-                    // Only emit to receiver if they haven't blocked the sender AND they have accepted the request
-                    if (!otherUserBlockedMe && conversation.status === 'accepted') {
-                        this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
+                    // Only emit to receiver if they haven't blocked the sender
+                    if (!otherUserBlockedMe) {
+                        if (conversation.status === 'accepted') {
+                            this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
+                        } else if (conversation.status === 'pending') {
+                            this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.NEW_REQUEST, {
+                                conversationId: conversation.id,
+                                senderId: senderId,
+                            })
+                        }
                     }
 
                     // Always emit back to sender so they see their own message
@@ -329,6 +336,18 @@ class SocketServer {
         created_at: string | Date
     }) {
         this.io.to(`group_${groupId}`).emit(GROUP_EVENTS.RECEIVE_MESSAGE, message)
+    }
+
+    public notifyConversationStatusUpdated(
+        conversationId: number,
+        senderId: number,
+        receiverId: number,
+        status: string
+    ) {
+        if (!this.io) return;
+        const payload = { conversationId, senderId, receiverId, status };
+        this.io.to(`user_${senderId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, payload);
+        this.io.to(`user_${receiverId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, payload);
     }
 
     public getIO(): Server {

@@ -2,6 +2,7 @@ import ConversationRepository from "@/repositories/conversation.repository";
 import asyncHandler, { sendResponse } from "@/utils";
 import { Request, Response } from "express";
 import User from "@/models/user.model";
+import SocketServer from "@/config/Socket";
 
 class ConversationController {
     private conversationRepo: ConversationRepository;
@@ -75,6 +76,12 @@ class ConversationController {
         }
 
         const conversation = await this.conversationRepo.updateStatus(Number(id), userId, status);
+        SocketServer.getInstance().notifyConversationStatusUpdated(
+            conversation.id,
+            conversation.sender_id,
+            conversation.receiver_id,
+            status
+        );
         return sendResponse({ 
             res, 
             message: `Conversation request ${status} successfully`, 
