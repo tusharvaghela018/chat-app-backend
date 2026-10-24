@@ -4,10 +4,12 @@ export const CHAT_EVENTS = {
     // Client → Server
     SEND_MESSAGE: "send_message",
     MARK_SEEN: "mark_seen",
+    TOGGLE_REACTION: "toggle_reaction",
 
     // Server → Client
     RECEIVE_MESSAGE: "receive_message",
     MESSAGES_SEEN: "messages_seen",
+    REACTION_UPDATED: "reaction_updated",
 
     TYPING_START: "typing_start",    // ← add
     TYPING_STOP: "typing_stop",     // ← add
@@ -15,17 +17,21 @@ export const CHAT_EVENTS = {
     ERROR: "error",
     CONVERSATION_STATUS_UPDATED: "conversation_status_updated",
     NEW_REQUEST: "new_request",
+    USER_STATUS: "user_status",
+    ONLINE_USERS: "online_users",
 } as const
 
 export const GROUP_EVENTS = {
     // Client → Server
     SEND_MESSAGE: "group_send_message",
     MARK_SEEN: "group_mark_seen",
+    TOGGLE_REACTION: "group_toggle_reaction",
     TYPING_START: "group_typing_start",
     TYPING_STOP: "group_typing_stop",
 
     // Server → Client
     RECEIVE_MESSAGE: "group_receive_message",
+    REACTION_UPDATED: "group_reaction_updated",
     TYPING: "group_typing",
     SEEN_UPDATE: "group_seen_update",
     MEMBER_JOINED: "group_member_joined",

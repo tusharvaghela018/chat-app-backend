@@ -7,6 +7,7 @@ export interface IUser {
     google_id?: string
     avatar?: string
     is_online?: boolean
+    last_seen?: Date
     public_key?: string
     encrypted_vault?: string
     vault_salt?: string

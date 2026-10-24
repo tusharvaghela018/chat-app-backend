@@ -2,6 +2,7 @@ import { Op } from "sequelize"
 import BaseRepository from "@/repositories"
 import GroupMessage from "@/models/group-message.model"
 import GroupMessageSeen from "@/models/group-message-seen.model"
+import GroupMessageReaction from "@/models/group-message-reaction.model"
 import User from "@/models/user.model"
 
 class GroupMessageRepository extends BaseRepository<GroupMessage> {
@@ -73,8 +74,38 @@ class GroupMessageRepository extends BaseRepository<GroupMessage> {
                         },
                     ],
                 },
+                {
+                    model: GroupMessageReaction,
+                    as: "reactions",
+                    attributes: ["id", "group_message_id", "user_id", "emoji"],
+                },
             ],
         }).then(messages => messages.reverse()) // reverse to chronological order
+    }
+
+    readonly toggleReaction = async (groupMessageId: number, userId: number, emoji: string) => {
+        const existing = await GroupMessageReaction.findOne({
+            where: {
+                group_message_id: groupMessageId,
+                user_id: userId,
+                emoji,
+            }
+        });
+
+        if (existing) {
+            await existing.destroy({ force: true });
+        } else {
+            await GroupMessageReaction.create({
+                group_message_id: groupMessageId,
+                user_id: userId,
+                emoji,
+            });
+        }
+
+        return await GroupMessageReaction.findAll({
+            where: { group_message_id: groupMessageId },
+            attributes: ["id", "group_message_id", "user_id", "emoji"]
+        });
     }
 
     // ─── Mark multiple messages as seen by a user ────────────────────────────

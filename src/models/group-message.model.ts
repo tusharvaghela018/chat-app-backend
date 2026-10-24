@@ -5,6 +5,7 @@ import {
 import User from "@/models/user.model";
 import Group from "@/models/group.model";
 import GroupMessageSeen from "@/models/group-message-seen.model";
+import GroupMessageReaction from "@/models/group-message-reaction.model";
 import { IGroupMessage } from "@/types/models/group-message.interface";
 
 @Table({
@@ -46,4 +47,7 @@ export default class GroupMessage extends Model<IGroupMessage> implements IGroup
 
     @HasMany(() => GroupMessageSeen, "message_id")
     seenBy: GroupMessageSeen[];
+
+    @HasMany(() => GroupMessageReaction, "group_message_id")
+    reactions: GroupMessageReaction[];
 }

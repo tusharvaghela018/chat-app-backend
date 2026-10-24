@@ -72,6 +72,12 @@ export default class User extends Model<IUser> implements IUser {
     is_online: boolean;
 
     @Column({
+        type: DataType.DATE,
+        allowNull: true
+    })
+    last_seen: Date;
+
+    @Column({
         type: DataType.TEXT,
         allowNull: true
     })

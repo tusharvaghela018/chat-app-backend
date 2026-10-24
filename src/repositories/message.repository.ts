@@ -1,5 +1,6 @@
 import Conversation from "@/models/conversations.model";
 import Message from "@/models/message.model";
+import MessageReaction from "@/models/message-reaction.model";
 import BaseRepository from "@/repositories";
 import { Op } from "sequelize";
 
@@ -47,7 +48,39 @@ class MessageRepository extends BaseRepository<Message> {
             where: whereClause,
             limit,
             order: [["id", "DESC"]],
+            include: [
+                {
+                    model: MessageReaction,
+                    as: "reactions",
+                    attributes: ["id", "message_id", "user_id", "emoji"],
+                }
+            ]
         }).then(messages => messages.reverse())
+    }
+
+    readonly toggleReaction = async (messageId: number, userId: number, emoji: string) => {
+        const existing = await MessageReaction.findOne({
+            where: {
+                message_id: messageId,
+                user_id: userId,
+                emoji,
+            }
+        });
+
+        if (existing) {
+            await existing.destroy({ force: true });
+        } else {
+            await MessageReaction.create({
+                message_id: messageId,
+                user_id: userId,
+                emoji,
+            });
+        }
+
+        return await MessageReaction.findAll({
+            where: { message_id: messageId },
+            attributes: ["id", "message_id", "user_id", "emoji"]
+        });
     }
 }
 

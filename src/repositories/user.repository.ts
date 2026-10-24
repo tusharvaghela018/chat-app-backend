@@ -202,7 +202,7 @@ class UserRepository extends BaseRepository<User> {
 
         const { rows, count } = await this.findAndCountAll({
             where: whereClause,
-            attributes: ["id", "name", "username", "avatar", "is_online", "email", "public_key"],
+            attributes: ["id", "name", "username", "avatar", "is_online", "last_seen", "email", "public_key"],
             limit,
             offset,
             order: [["name", "ASC"]],

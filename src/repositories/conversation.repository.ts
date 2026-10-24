@@ -82,12 +82,12 @@ class ConversationRepository extends BaseRepository<Conversation> {
                 {
                     model: User,
                     as: 'sender',
-                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'public_key']
+                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'last_seen', 'public_key']
                 },
                 {
                     model: User,
                     as: 'receiver',
-                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'public_key']
+                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'last_seen', 'public_key']
                 }
             ],
             order: [['updated_at', 'DESC']]

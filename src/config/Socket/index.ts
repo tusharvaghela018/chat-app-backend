@@ -19,6 +19,7 @@ class SocketServer {
     private groupMembersRepo = new GroupMemberRepository()
     private messageRepo = new MessageRepository()
     private groupMessageRepo = new GroupMessageRepository()
+    private connectedUsers: Map<number, Set<string>> = new Map()
 
     private constructor() { }
 
@@ -30,6 +31,11 @@ class SocketServer {
     }
 
     public initialize(server: HttpServer) {
+        // Reset any stale is_online flags on startup
+        User.update({ is_online: false }, { where: { is_online: true } }).catch(err => {
+            console.error("Failed to reset is_online on startup", err);
+        });
+
         this.io = new Server(server, {
             cors: {
                 origin: true,
@@ -79,6 +85,26 @@ class SocketServer {
             const { id: senderId } = socket.data.user
             socket.join(`user_${senderId}`)
             console.log(`User connected UserId : ${senderId}`);
+
+            // Track active socket connection for real-time online/offline status
+            const userSockets = this.connectedUsers.get(senderId) || new Set<string>();
+            const wasOffline = userSockets.size === 0;
+            userSockets.add(socket.id);
+            this.connectedUsers.set(senderId, userSockets);
+
+            if (wasOffline) {
+                User.update({ is_online: true }, { where: { id: senderId } }).catch(err => {
+                    console.error("Failed to update user is_online=true", err);
+                });
+                this.io.emit(CHAT_EVENTS.USER_STATUS, {
+                    userId: senderId,
+                    isOnline: true,
+                    lastSeen: null,
+                });
+            }
+
+            // Emit current list of online user IDs to the connected client
+            socket.emit(CHAT_EVENTS.ONLINE_USERS, Array.from(this.connectedUsers.keys()));
 
             const groupIds = await this.groupMembersRepo.findGroupIdsByUserId(senderId)
 
@@ -220,6 +246,37 @@ class SocketServer {
                 }
             })
 
+            socket.on(CHAT_EVENTS.TOGGLE_REACTION, async (data: { messageId: number; emoji: string; receiverId: number }) => {
+                try {
+                    const reactions = await this.messageRepo.toggleReaction(data.messageId, senderId, data.emoji)
+                    const payload = {
+                        messageId: data.messageId,
+                        reactions: reactions.map(r => r.toJSON()),
+                    }
+                    this.io.to(`user_${senderId}`).emit(CHAT_EVENTS.REACTION_UPDATED, payload)
+                    this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.REACTION_UPDATED, payload)
+                } catch (err) {
+                    console.error("Failed to toggle reaction", err)
+                }
+            })
+
+            socket.on(GROUP_EVENTS.TOGGLE_REACTION, async (data: { groupMessageId: number; groupId: number; emoji: string }) => {
+                try {
+                    const isMember = await this.groupMembersRepo.isMember(data.groupId, senderId)
+                    if (!isMember) return
+
+                    const reactions = await this.groupMessageRepo.toggleReaction(data.groupMessageId, senderId, data.emoji)
+                    const payload = {
+                        groupMessageId: data.groupMessageId,
+                        groupId: data.groupId,
+                        reactions: reactions.map(r => r.toJSON()),
+                    }
+                    this.io.to(`group_${data.groupId}`).emit(GROUP_EVENTS.REACTION_UPDATED, payload)
+                } catch (err) {
+                    console.error("Failed to toggle group reaction", err)
+                }
+            })
+
             socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any }) => {
                 try {
                     const member = await this.groupMembersRepo.isMember(data.groupId, senderId)
@@ -289,8 +346,24 @@ class SocketServer {
                 })
             })
 
-            socket.on("disconnect", () => {
+            socket.on("disconnect", async () => {
                 console.log(`User disconnect UserId : ${senderId}`);
+                const userSockets = this.connectedUsers.get(senderId);
+                if (userSockets) {
+                    userSockets.delete(socket.id);
+                    if (userSockets.size === 0) {
+                        this.connectedUsers.delete(senderId);
+                        const now = new Date();
+                        User.update({ is_online: false, last_seen: now }, { where: { id: senderId } }).catch(err => {
+                            console.error("Failed to update user is_online=false", err);
+                        });
+                        this.io.emit(CHAT_EVENTS.USER_STATUS, {
+                            userId: senderId,
+                            isOnline: false,
+                            lastSeen: now.toISOString(),
+                        });
+                    }
+                }
             });
         });
     }
