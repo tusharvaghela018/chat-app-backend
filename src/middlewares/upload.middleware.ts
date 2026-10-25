@@ -43,7 +43,11 @@ class UploadMiddleware {
     public mediaUpload = (() => {
         const storage = multer.memoryStorage()
 
-        const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+        const fileFilter = (
+            _req: any,
+            file: { originalname?: string },
+            cb: (error: Error | null, acceptFile?: boolean) => void
+        ) => {
             const parts = (file.originalname || "").toLowerCase().split(".")
             const ext = parts[parts.length - 1] || ""
 
