@@ -20,6 +20,12 @@ class UploadRoute {
             uploadMiddleware.mediaUpload,
             this.uploadController.uploadMedia
         )
+
+        this.router.get(
+            `${this.path}/download`,
+            this.authMiddleware.softAuthenticate,
+            this.uploadController.downloadFile
+        )
     }
 }
 
