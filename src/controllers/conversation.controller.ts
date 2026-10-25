@@ -35,7 +35,7 @@ class ConversationController {
     readonly getConversationByUser = asyncHandler(async (req: Request, res: Response) => {
         const senderId = (req.user as User).id;
         const receiverId = Number(req.params.receiverId);
-        const conversation = await this.conversationRepo.getConversation({ senderId, receiverId });
+        const conversation = await this.conversationRepo.getConversationWithActivity({ senderId, receiverId });
         
         if (!conversation) return sendResponse({ res, data: null });
 

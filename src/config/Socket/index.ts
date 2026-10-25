@@ -254,7 +254,8 @@ class SocketServer {
 
 
             socket.on(CHAT_EVENTS.TYPING_START, async (data: { receiverId: number }) => {
-                const conversation = await this.conversationRepo.getConversation({ senderId, receiverId: data.receiverId })
+                const conversation = await this.conversationRepo.findExistingConversation({ senderId, receiverId: data.receiverId })
+                if (!conversation) return
                 const isSender = conversation.sender_id === senderId
                 const otherBlockedMe = isSender ? conversation.blocked_by_receiver : conversation.blocked_by_sender
                 
@@ -267,7 +268,8 @@ class SocketServer {
             })
 
             socket.on(CHAT_EVENTS.TYPING_STOP, async (data: { receiverId: number }) => {
-                const conversation = await this.conversationRepo.getConversation({ senderId, receiverId: data.receiverId })
+                const conversation = await this.conversationRepo.findExistingConversation({ senderId, receiverId: data.receiverId })
+                if (!conversation) return
                 const isSender = conversation.sender_id === senderId
                 const otherBlockedMe = isSender ? conversation.blocked_by_receiver : conversation.blocked_by_sender
 

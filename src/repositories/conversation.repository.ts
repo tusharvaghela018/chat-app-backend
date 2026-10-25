@@ -9,7 +9,7 @@ class ConversationRepository extends BaseRepository<Conversation> {
         super(Conversation);
     }
 
-    readonly getConversation = async ({ senderId, receiverId }: { senderId: number, receiverId: number }) => {
+    readonly findExistingConversation = async ({ senderId, receiverId }: { senderId: number, receiverId: number }) => {
         let conversation = await this.findOne(
             {
                 where: {
@@ -30,6 +30,12 @@ class ConversationRepository extends BaseRepository<Conversation> {
             )
         }
 
+        return conversation
+    }
+
+    readonly getOrCreateConversation = async ({ senderId, receiverId }: { senderId: number, receiverId: number }) => {
+        let conversation = await this.findExistingConversation({ senderId, receiverId })
+
         if (!conversation) {
             conversation = await this.create(
                 {
@@ -38,6 +44,23 @@ class ConversationRepository extends BaseRepository<Conversation> {
                     status: 'pending'
                 }
             )
+        }
+
+        return conversation
+    }
+
+    readonly getConversation = this.getOrCreateConversation
+
+    readonly getConversationWithActivity = async ({ senderId, receiverId }: { senderId: number, receiverId: number }) => {
+        const conversation = await this.findExistingConversation({ senderId, receiverId })
+        if (!conversation) return null
+
+        // If status is pending, verify that at least one message has been sent
+        if (conversation.status === 'pending') {
+            const count = await Message.count({ where: { conversation_id: conversation.id } })
+            if (count === 0) {
+                return null
+            }
         }
 
         return conversation
@@ -154,7 +177,8 @@ class ConversationRepository extends BaseRepository<Conversation> {
             return plainConv
         }))
 
-        return convsWithMessages
+        // Omit empty pending conversations (conversations with status 'pending' that have 0 messages)
+        return convsWithMessages.filter((c) => !(c.status === 'pending' && (!c.messages || c.messages.length === 0)))
     }
 
     readonly getBlockedConversations = async (userId: number) => {
