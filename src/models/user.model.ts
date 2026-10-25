@@ -78,6 +78,41 @@ export default class User extends Model<IUser> implements IUser {
     last_seen: Date;
 
     @Column({
+        type: DataType.STRING(20),
+        allowNull: false,
+        defaultValue: 'contacts'
+    })
+    last_seen_privacy: "everyone" | "contacts" | "nobody";
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: false,
+        defaultValue: 'contacts'
+    })
+    avatar_privacy: "everyone" | "contacts" | "nobody";
+
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
+    })
+    read_receipts: boolean;
+
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
+    })
+    search_discoverable: boolean;
+
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
+    })
+    find_by_email_phone: boolean;
+
+    @Column({
         type: DataType.TEXT,
         allowNull: true
     })

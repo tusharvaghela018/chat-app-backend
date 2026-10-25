@@ -21,6 +21,7 @@ class SocketServer {
     private messageRepo = new MessageRepository()
     private groupMessageRepo = new GroupMessageRepository()
     private connectedUsers: Map<number, Set<string>> = new Map()
+    private userPrivacyMap: Map<number, { last_seen_privacy?: string; read_receipts?: boolean; avatar_privacy?: string }> = new Map()
 
     private constructor() { }
 
@@ -93,19 +94,32 @@ class SocketServer {
             userSockets.add(socket.id);
             this.connectedUsers.set(senderId, userSockets);
 
+            this.userPrivacyMap.set(senderId, {
+                last_seen_privacy: socket.data.user?.last_seen_privacy || 'everyone',
+                read_receipts: socket.data.user?.read_receipts !== false,
+                avatar_privacy: socket.data.user?.avatar_privacy || 'everyone'
+            });
+
+            const currentPrivacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy;
+
             if (wasOffline) {
                 User.update({ is_online: true }, { where: { id: senderId } }).catch(err => {
                     console.error("Failed to update user is_online=true", err);
                 });
-                this.io.emit(CHAT_EVENTS.USER_STATUS, {
-                    userId: senderId,
-                    isOnline: true,
-                    lastSeen: null,
-                });
+                if (currentPrivacy !== 'nobody') {
+                    this.io.emit(CHAT_EVENTS.USER_STATUS, {
+                        userId: senderId,
+                        isOnline: true,
+                        lastSeen: null,
+                    });
+                }
             }
 
-            // Emit current list of online user IDs to the connected client
-            socket.emit(CHAT_EVENTS.ONLINE_USERS, Array.from(this.connectedUsers.keys()));
+            // Emit current list of online user IDs to the connected client (filter out users with last_seen_privacy === 'nobody')
+            const visibleOnlineIds = Array.from(this.connectedUsers.keys()).filter((uid) => {
+                return this.userPrivacyMap.get(uid)?.last_seen_privacy !== 'nobody';
+            });
+            socket.emit(CHAT_EVENTS.ONLINE_USERS, visibleOnlineIds);
 
             const groupIds = await this.groupMembersRepo.findGroupIdsByUserId(senderId)
 
@@ -181,6 +195,9 @@ class SocketServer {
 
             socket.on(CHAT_EVENTS.MARK_SEEN, async ({ conversationId, senderId: sender_id }) => {
                 const user = socket.data.user;
+
+                // Respect read receipts setting
+                if (user?.read_receipts === false) return;
 
                 // Check block status before marking as seen
                 const conversation = await this.conversationRepo.findById(conversationId)
@@ -358,15 +375,58 @@ class SocketServer {
                         User.update({ is_online: false, last_seen: now }, { where: { id: senderId } }).catch(err => {
                             console.error("Failed to update user is_online=false", err);
                         });
-                        this.io.emit(CHAT_EVENTS.USER_STATUS, {
-                            userId: senderId,
-                            isOnline: false,
-                            lastSeen: now.toISOString(),
-                        });
+                        const privacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy;
+                        if (privacy !== 'nobody') {
+                            this.io.emit(CHAT_EVENTS.USER_STATUS, {
+                                userId: senderId,
+                                isOnline: false,
+                                lastSeen: now.toISOString(),
+                            });
+                        } else {
+                            this.io.emit(CHAT_EVENTS.USER_STATUS, {
+                                userId: senderId,
+                                isOnline: false,
+                                lastSeen: null,
+                            });
+                        }
                     }
                 }
             });
         });
+    }
+
+    public updateUserPrivacy(userId: number, settings: { last_seen_privacy?: string; read_receipts?: boolean; avatar_privacy?: string }) {
+        const current = this.userPrivacyMap.get(userId) || {};
+        const updated = { ...current, ...settings };
+        this.userPrivacyMap.set(userId, updated);
+
+        // Update all active sockets for this user
+        const userSocketIds = this.connectedUsers.get(userId);
+        if (userSocketIds) {
+            for (const socketId of userSocketIds) {
+                const s = this.io?.sockets?.sockets?.get(socketId);
+                if (s && s.data.user) {
+                    if (settings.last_seen_privacy) s.data.user.last_seen_privacy = settings.last_seen_privacy;
+                    if (settings.read_receipts !== undefined) s.data.user.read_receipts = settings.read_receipts;
+                    if (settings.avatar_privacy) s.data.user.avatar_privacy = settings.avatar_privacy;
+                }
+            }
+        }
+
+        // Broadcast status changes
+        if (settings.last_seen_privacy === 'nobody') {
+            this.io?.emit(CHAT_EVENTS.USER_STATUS, {
+                userId,
+                isOnline: false,
+                lastSeen: null,
+            });
+        } else if (settings.last_seen_privacy && userSocketIds && userSocketIds.size > 0) {
+            this.io?.emit(CHAT_EVENTS.USER_STATUS, {
+                userId,
+                isOnline: true,
+                lastSeen: null,
+            });
+        }
     }
 
     // ── notify group room from REST controllers ───────────────────────────
