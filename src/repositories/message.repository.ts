@@ -1,6 +1,7 @@
 import Conversation from "@/models/conversations.model";
 import Message from "@/models/message.model";
 import MessageReaction from "@/models/message-reaction.model";
+import StarredMessage from "@/models/starred-message.model";
 import BaseRepository from "@/repositories";
 import { Op } from "sequelize";
 
@@ -53,7 +54,12 @@ class MessageRepository extends BaseRepository<Message> {
                     model: MessageReaction,
                     as: "reactions",
                     attributes: ["id", "message_id", "user_id", "emoji"],
-                }
+                },
+                {
+                    model: StarredMessage,
+                    as: "starred",
+                    attributes: ["id", "user_id", "message_id"],
+                },
             ]
         }).then(messages => messages.reverse())
     }

@@ -30,6 +30,28 @@ class UploadMiddleware {
         "chat-app/users",
         ["jpg", "jpeg", "png", "webp"]
     ).single("avatar")
+
+    // ── general media (audio, docs, pdf, images) ───────────────────────────
+    public mediaUpload = (() => {
+        const storage = new CloudinaryStorage({
+            cloudinary,
+            params: async (_req: any, file: any) => {
+                const cleanName = (file.originalname || "attachment")
+                    .replace(/\.[^/.]+$/, "")
+                    .replace(/[^a-zA-Z0-9_-]/g, "_")
+                return {
+                    folder: "chat-app/media",
+                    resource_type: "auto",
+                    public_id: `${Date.now()}_${cleanName}`,
+                }
+            },
+        })
+
+        return multer({
+            storage,
+            limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+        }).single("file")
+    })()
 }
 
 export default new UploadMiddleware()

@@ -60,7 +60,8 @@ class ConversationRepository extends BaseRepository<Conversation> {
         const conversation = await this.findById(id)
         if (!conversation) throw new Error("Conversation not found")
 
-        if (conversation.sender_id === userId) {            conversation.blocked_by_sender = block
+        if (conversation.sender_id === userId) {
+            conversation.blocked_by_sender = block
         } else if (conversation.receiver_id === userId) {
             conversation.blocked_by_receiver = block
         } else {
@@ -70,13 +71,40 @@ class ConversationRepository extends BaseRepository<Conversation> {
         return await conversation.save()
     }
 
-    readonly getMyConversations = async (userId: number) => {
+    readonly updateArchiveStatus = async (id: number, userId: number, archive: boolean) => {
+        const conversation = await this.findById(id)
+        if (!conversation) throw new Error("Conversation not found")
+
+        if (conversation.sender_id === userId) {
+            conversation.archived_by_sender = archive
+        } else if (conversation.receiver_id === userId) {
+            conversation.archived_by_receiver = archive
+        } else {
+            throw new Error("User not part of this conversation")
+        }
+
+        return await conversation.save()
+    }
+
+    readonly getMyConversations = async (userId: number, isArchived: boolean = false) => {
         const conversations = await Conversation.findAll({
             where: {
                 [Op.or]: [
-                    { [Op.and]: [{ sender_id: userId }, { blocked_by_sender: false }] },
-                    { [Op.and]: [{ receiver_id: userId }, { blocked_by_receiver: false }] }
-                ]
+                    {
+                        [Op.and]: [
+                            { sender_id: userId },
+                            { blocked_by_sender: false },
+                            { archived_by_sender: isArchived },
+                        ],
+                    },
+                    {
+                        [Op.and]: [
+                            { receiver_id: userId },
+                            { blocked_by_receiver: false },
+                            { archived_by_receiver: isArchived },
+                        ],
+                    },
+                ],
             },
             include: [
                 {
@@ -108,6 +136,7 @@ class ConversationRepository extends BaseRepository<Conversation> {
 
             const plainConv = conv.toJSON() as any
             plainConv.messages = lastMessage ? [lastMessage] : []
+            plainConv.is_archived = isSender ? plainConv.archived_by_sender : plainConv.archived_by_receiver
             return plainConv
         }))
 

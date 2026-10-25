@@ -3,6 +3,7 @@ import BaseRepository from "@/repositories"
 import GroupMessage from "@/models/group-message.model"
 import GroupMessageSeen from "@/models/group-message-seen.model"
 import GroupMessageReaction from "@/models/group-message-reaction.model"
+import StarredMessage from "@/models/starred-message.model"
 import User from "@/models/user.model"
 
 class GroupMessageRepository extends BaseRepository<GroupMessage> {
@@ -78,6 +79,11 @@ class GroupMessageRepository extends BaseRepository<GroupMessage> {
                     model: GroupMessageReaction,
                     as: "reactions",
                     attributes: ["id", "group_message_id", "user_id", "emoji"],
+                },
+                {
+                    model: StarredMessage,
+                    as: "starred",
+                    attributes: ["id", "user_id", "group_message_id"],
                 },
             ],
         }).then(messages => messages.reverse()) // reverse to chronological order

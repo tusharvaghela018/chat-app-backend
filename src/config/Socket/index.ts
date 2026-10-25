@@ -10,6 +10,7 @@ import { Server, Socket } from "socket.io";
 import { GROUP_EVENTS } from "../../constants/socket.constants";
 import GroupMemberRepository from "@/repositories/group-member.repository";
 import GroupMessageRepository from "@/repositories/group-message.repository";
+import starredMessageRepository from "@/repositories/starred-message.repository";
 
 class SocketServer {
     private static instance: SocketServer;
@@ -421,6 +422,37 @@ class SocketServer {
         const payload = { conversationId, senderId, receiverId, status };
         this.io.to(`user_${senderId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, payload);
         this.io.to(`user_${receiverId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, payload);
+    }
+
+    public notifyConversationArchived(
+        userId: number,
+        conversationId: number,
+        archived: boolean
+    ) {
+        if (!this.io) return;
+        this.io.to(`user_${userId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, {
+            conversationId,
+            archived,
+        });
+    }
+
+    public notifyStarUpdated(userId: number, data: { messageId?: number; groupMessageId?: number; isStarred: boolean; groupId?: number }) {
+        if (!this.io) return;
+        if (data.messageId) {
+            this.io.to(`user_${userId}`).emit(CHAT_EVENTS.STAR_UPDATED, {
+                messageId: data.messageId,
+                isStarred: data.isStarred,
+                userId,
+            });
+        }
+        if (data.groupMessageId) {
+            this.io.to(`user_${userId}`).emit(GROUP_EVENTS.STAR_UPDATED, {
+                groupMessageId: data.groupMessageId,
+                isStarred: data.isStarred,
+                userId,
+                groupId: data.groupId,
+            });
+        }
     }
 
     public getIO(): Server {

@@ -5,6 +5,8 @@ export interface IConversation {
     status: 'pending' | 'accepted' | 'rejected';
     blocked_by_sender: boolean;
     blocked_by_receiver: boolean;
+    archived_by_sender?: boolean;
+    archived_by_receiver?: boolean;
     created_at?: Date;
     updated_at?: Date;
     deleted_at?: Date;

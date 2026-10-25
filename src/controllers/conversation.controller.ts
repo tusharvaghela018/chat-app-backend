@@ -13,7 +13,8 @@ class ConversationController {
 
     readonly getMyConversations = asyncHandler(async (req: Request, res: Response) => {
         const userId = (req.user as User).id;
-        const conversations = await this.conversationRepo.getMyConversations(userId);
+        const isArchived = req.query.archived === 'true';
+        const conversations = await this.conversationRepo.getMyConversations(userId, isArchived);
 
         // Sanitize to hide 'they blocked me' info
         const sanitized = conversations.map(c => {
@@ -21,7 +22,10 @@ class ConversationController {
             return {
                 ...c,
                 blocked_by_sender: isSender ? c.blocked_by_sender : false,
-                blocked_by_receiver: !isSender ? c.blocked_by_receiver : false
+                blocked_by_receiver: !isSender ? c.blocked_by_receiver : false,
+                archived_by_sender: isSender ? c.archived_by_sender : false,
+                archived_by_receiver: !isSender ? c.archived_by_receiver : false,
+                is_archived: isSender ? c.archived_by_sender : c.archived_by_receiver,
             }
         })
 
@@ -99,6 +103,23 @@ class ConversationController {
             res, 
             message: `User ${block ? 'blocked' : 'unblocked'} successfully`, 
             data: conversation 
+        });
+    });
+
+    readonly updateArchiveStatus = asyncHandler(async (req: Request, res: Response) => {
+        const userId = (req.user as User).id;
+        const { id } = req.params;
+        const { archive } = req.body; // true to archive, false to unarchive
+
+        const shouldArchive = archive !== undefined ? !!archive : true;
+        const conversation = await this.conversationRepo.updateArchiveStatus(Number(id), userId, shouldArchive);
+
+        SocketServer.getInstance().notifyConversationArchived(userId, Number(id), shouldArchive);
+
+        return sendResponse({
+            res,
+            message: `Conversation ${shouldArchive ? 'archived' : 'unarchived'} successfully`,
+            data: conversation,
         });
     });
 }

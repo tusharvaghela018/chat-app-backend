@@ -6,6 +6,7 @@ import User from "@/models/user.model";
 import Group from "@/models/group.model";
 import GroupMessageSeen from "@/models/group-message-seen.model";
 import GroupMessageReaction from "@/models/group-message-reaction.model";
+import StarredMessage from "@/models/starred-message.model";
 import { IGroupMessage } from "@/types/models/group-message.interface";
 
 @Table({
@@ -50,4 +51,11 @@ export default class GroupMessage extends Model<IGroupMessage> implements IGroup
 
     @HasMany(() => GroupMessageReaction, "group_message_id")
     reactions: GroupMessageReaction[];
+
+    @HasMany(() => StarredMessage, "group_message_id")
+    starred: StarredMessage[];
+
+    created_at: Date;
+    updated_at: Date;
+    deleted_at: Date;
 }
