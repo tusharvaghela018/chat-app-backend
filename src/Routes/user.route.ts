@@ -16,6 +16,7 @@ class UserRoute {
     private initializeRoutes() {
         this.router.get(`${this.path}`, this.authMiddleware.authenticate, this.userController.getUserList)
         this.router.patch(`${this.path}/public-key`, this.authMiddleware.authenticate, this.userController.updatePublicKey)
+        this.router.patch(`${this.path}/settings`, this.authMiddleware.authenticate, this.userController.updateSettings)
         this.router.patch(`${this.path}`, this.authMiddleware.authenticate, uploadMiddleware.userAvatar, this.userController.updateProfile)
     }
 }

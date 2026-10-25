@@ -3,6 +3,7 @@ import UserRepository from "@/repositories/user.repository";
 import asyncHandler, { sendResponse } from "@/utils";
 import { Request, Response } from "express";
 import { Op } from "sequelize";
+import SocketServer from "@/config/Socket";
 
 class UserController {
     private userRepo: UserRepository
@@ -72,6 +73,60 @@ class UserController {
         })
 
         return sendResponse({ res, message: "Profile Updated successfully", success: true, show_toast: true })
+    })
+
+    readonly updateSettings = asyncHandler(async (req: Request, res: Response) => {
+        const userId = (req.user as any).id
+        const { 
+            last_seen_privacy, 
+            avatar_privacy, 
+            read_receipts, 
+            search_discoverable, 
+            find_by_email_phone 
+        } = req.body
+
+        const updateData: any = {}
+        const validOptions = ["everyone", "contacts", "nobody"]
+
+        if (last_seen_privacy && validOptions.includes(last_seen_privacy)) {
+            updateData.last_seen_privacy = last_seen_privacy
+        }
+        if (avatar_privacy && validOptions.includes(avatar_privacy)) {
+            updateData.avatar_privacy = avatar_privacy
+        }
+        if (typeof read_receipts === "boolean") {
+            updateData.read_receipts = read_receipts
+        }
+        if (typeof search_discoverable === "boolean") {
+            updateData.search_discoverable = search_discoverable
+        }
+        if (typeof find_by_email_phone === "boolean") {
+            updateData.find_by_email_phone = find_by_email_phone
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            await this.userRepo.update(updateData, {
+                where: { id: userId }
+            })
+            // Real-time synchronization with active socket connections
+            SocketServer.getInstance().updateUserPrivacy(userId, {
+                last_seen_privacy: updateData.last_seen_privacy,
+                read_receipts: updateData.read_receipts,
+                avatar_privacy: updateData.avatar_privacy
+            })
+        }
+
+        const updatedUser = await this.userRepo.findOne({
+            where: { id: userId }
+        })
+
+        return sendResponse({
+            res,
+            message: "Settings updated successfully",
+            data: { user: (this.userRepo as any).sanitize(updatedUser!) },
+            success: true,
+            show_toast: true
+        })
     })
 }
 

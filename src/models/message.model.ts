@@ -5,9 +5,12 @@ import {
     Table,
     ForeignKey,
     BelongsTo,
+    HasMany,
 } from "sequelize-typescript";
 import User from "@/models/user.model";
 import Conversation from "@/models/conversations.model";
+import MessageReaction from "@/models/message-reaction.model";
+import StarredMessage from "@/models/starred-message.model";
 import { IMessage } from "@/types/models/message.model";
 @Table({
     tableName: "messages",
@@ -77,6 +80,12 @@ export default class Message extends Model<IMessage> implements IMessage {
     // Which conversation this message belongs to
     @BelongsTo(() => Conversation, "conversation_id")
     conversation: Conversation;
+
+    @HasMany(() => MessageReaction, "message_id")
+    reactions: MessageReaction[];
+
+    @HasMany(() => StarredMessage, "message_id")
+    starred: StarredMessage[];
 
     created_at: Date;
     updated_at: Date;

@@ -64,6 +64,20 @@ export default class Conversation extends Model<IConversation> implements IConve
     })
     blocked_by_receiver: boolean;
 
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    })
+    archived_by_sender: boolean;
+
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    })
+    archived_by_receiver: boolean;
+
     // User who started the conversation
     @BelongsTo(() => User, "sender_id")
     sender: User;

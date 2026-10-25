@@ -21,6 +21,7 @@ class ConversationRoute implements Routes {
         this.router.get(`${this.path}/user/:receiverId`, this.conversationController.getConversationByUser);
         this.router.patch(`${this.path}/:id/status`, this.conversationController.updateStatus);
         this.router.patch(`${this.path}/:id/block`, this.conversationController.updateBlockStatus);
+        this.router.patch(`${this.path}/:id/archive`, this.conversationController.updateArchiveStatus);
     }
 }
 

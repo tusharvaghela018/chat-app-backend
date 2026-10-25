@@ -178,41 +178,77 @@ class UserRepository extends BaseRepository<User> {
             id: { [Op.ne]: userId }
         }
 
+        const isContactSql = `(SELECT sender_id FROM conversations WHERE receiver_id = ${userId} AND deleted_at IS NULL
+                               UNION 
+                               SELECT receiver_id FROM conversations WHERE sender_id = ${userId} AND deleted_at IS NULL)`
+
         if (search) {
+            whereClause[Op.and] = [
+                {
+                    [Op.or]: [
+                        { search_discoverable: true },
+                        { id: { [Op.in]: Sequelize.literal(isContactSql) } }
+                    ]
+                }
+            ]
+
             whereClause[Op.or] = [
                 { username: { [Op.iLike]: `%${search}%` } },
                 { name: { [Op.iLike]: `%${search}%` } },
-                { email: { [Op.iLike]: `%${search}%` } },
+                {
+                    [Op.and]: [
+                        { email: { [Op.iLike]: `%${search}%` } },
+                        { find_by_email_phone: true }
+                    ]
+                }
             ]
         } else {
             // Only fetch users who have an active conversation with the current user
             whereClause.id = {
                 [Op.and]: [
                     { [Op.ne]: userId },
-                    {
-                        [Op.in]: Sequelize.literal(
-                            `(SELECT sender_id FROM conversations WHERE receiver_id = ${userId} AND deleted_at IS NULL
-                              UNION 
-                              SELECT receiver_id FROM conversations WHERE sender_id = ${userId} AND deleted_at IS NULL)`
-                        )
-                    }
+                    { [Op.in]: Sequelize.literal(isContactSql) }
                 ]
             }
         }
 
         const { rows, count } = await this.findAndCountAll({
             where: whereClause,
-            attributes: ["id", "name", "username", "avatar", "is_online", "email", "public_key"],
+            attributes: [
+                "id", 
+                "name", 
+                "username", 
+                "avatar", 
+                "is_online", 
+                "last_seen", 
+                "last_seen_privacy", 
+                "avatar_privacy", 
+                "email", 
+                "public_key"
+            ],
             limit,
             offset,
             order: [["name", "ASC"]],
         })
 
+        // Mask avatar and last_seen if privacy is set to 'nobody'
+        const sanitizedRows = rows.map((user) => {
+            const u = user.toJSON() as any
+            if (u.last_seen_privacy === "nobody") {
+                u.is_online = false
+                u.last_seen = null
+            }
+            if (u.avatar_privacy === "nobody") {
+                u.avatar = null
+            }
+            return u
+        })
+
         const totalPages = Math.ceil(count / limit)
 
         return {
-            users: rows,
-            count,                  // total matching records
+            users: sanitizedRows,
+            count,
             total_pages: totalPages,
             per_page: limit,
             page,

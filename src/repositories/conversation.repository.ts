@@ -60,7 +60,8 @@ class ConversationRepository extends BaseRepository<Conversation> {
         const conversation = await this.findById(id)
         if (!conversation) throw new Error("Conversation not found")
 
-        if (conversation.sender_id === userId) {            conversation.blocked_by_sender = block
+        if (conversation.sender_id === userId) {
+            conversation.blocked_by_sender = block
         } else if (conversation.receiver_id === userId) {
             conversation.blocked_by_receiver = block
         } else {
@@ -70,28 +71,67 @@ class ConversationRepository extends BaseRepository<Conversation> {
         return await conversation.save()
     }
 
-    readonly getMyConversations = async (userId: number) => {
+    readonly updateArchiveStatus = async (id: number, userId: number, archive: boolean) => {
+        const conversation = await this.findById(id)
+        if (!conversation) throw new Error("Conversation not found")
+
+        if (conversation.sender_id === userId) {
+            conversation.archived_by_sender = archive
+        } else if (conversation.receiver_id === userId) {
+            conversation.archived_by_receiver = archive
+        } else {
+            throw new Error("User not part of this conversation")
+        }
+
+        return await conversation.save()
+    }
+
+    readonly getMyConversations = async (userId: number, isArchived: boolean = false) => {
         const conversations = await Conversation.findAll({
             where: {
                 [Op.or]: [
-                    { [Op.and]: [{ sender_id: userId }, { blocked_by_sender: false }] },
-                    { [Op.and]: [{ receiver_id: userId }, { blocked_by_receiver: false }] }
-                ]
+                    {
+                        [Op.and]: [
+                            { sender_id: userId },
+                            { blocked_by_sender: false },
+                            { archived_by_sender: isArchived },
+                        ],
+                    },
+                    {
+                        [Op.and]: [
+                            { receiver_id: userId },
+                            { blocked_by_receiver: false },
+                            { archived_by_receiver: isArchived },
+                        ],
+                    },
+                ],
             },
             include: [
                 {
                     model: User,
                     as: 'sender',
-                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'public_key']
+                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'last_seen', 'last_seen_privacy', 'avatar_privacy', 'public_key']
                 },
                 {
                     model: User,
                     as: 'receiver',
-                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'public_key']
+                    attributes: ['id', 'name', 'username', 'avatar', 'is_online', 'last_seen', 'last_seen_privacy', 'avatar_privacy', 'public_key']
                 }
             ],
             order: [['updated_at', 'DESC']]
         })
+
+        const sanitizeUser = (u: any) => {
+            if (!u) return u
+            if (u.last_seen_privacy === "nobody") {
+                u.is_online = false
+                u.last_seen = null
+            }
+            if (u.avatar_privacy === "nobody") {
+                u.avatar = null
+            }
+            return u
+        }
 
         // For each conversation, fetch the latest non-hidden message manually to avoid Sequelize include + limit bugs
         const convsWithMessages = await Promise.all(conversations.map(async (conv) => {
@@ -108,6 +148,9 @@ class ConversationRepository extends BaseRepository<Conversation> {
 
             const plainConv = conv.toJSON() as any
             plainConv.messages = lastMessage ? [lastMessage] : []
+            plainConv.is_archived = isSender ? plainConv.archived_by_sender : plainConv.archived_by_receiver
+            plainConv.sender = sanitizeUser(plainConv.sender)
+            plainConv.receiver = sanitizeUser(plainConv.receiver)
             return plainConv
         }))
 
