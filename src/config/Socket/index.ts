@@ -165,13 +165,15 @@ class SocketServer {
                 console.log([...socket.rooms])
             }
 
-            socket.on(CHAT_EVENTS.SEND_MESSAGE, async (data: { receiverId: number, content: string }) => {
+            socket.on(CHAT_EVENTS.SEND_MESSAGE, async (data: { receiverId: number, content: string }, ack?: (res: any) => void) => {
                 try {
                     const conversation = await this.conversationRepo.getConversation({ senderId: senderId, receiverId: data.receiverId })
 
                     // Check if rejected - prevent sender from messaging again
                     if (conversation.status === 'rejected') {
-                        return socket.emit(CHAT_EVENTS.ERROR, { message: "You cannot send messages to this user." })
+                        const errPayload = { message: "You cannot send messages to this user." }
+                        if (typeof ack === "function") ack({ success: false, error: errPayload.message })
+                        return socket.emit(CHAT_EVENTS.ERROR, errPayload)
                     }
 
                     // Determine if the message should be hidden for either party
@@ -183,10 +185,6 @@ class SocketServer {
 
                     // If OTHER user has blocked ME, the message is hidden for THEM
                     const isHiddenForOther = otherUserBlockedMe
-                    // If I have blocked OTHER user, the message is hidden for ME (though I'm sending it)
-                    // Actually, if I block someone and I send them a message, I should probably still see my own message.
-                    // But the requirement says "user A blocked user B ... that periods time user A will not seen tat messages".
-                    // This usually refers to messages RECEIVED while having someone blocked.
                     
                     const message = await this.messageRepo.create({
                         conversation_id: conversation.id,
@@ -196,22 +194,26 @@ class SocketServer {
                         is_hidden_for_receiver_id: isReceiverInConv ? false : isHiddenForOther
                     })
 
-                    const { id, content, conversation_id, sender_id, created_at } = message.toJSON()
+                    const { id, content, conversation_id, sender_id: msg_sender_id, created_at } = message.toJSON()
 
                     const payload = {
                         id,
                         content,
-                        sender_id,
+                        sender_id: msg_sender_id,
                         receiver_id: data.receiverId,
                         conversation_id,
                         created_at
                     }
 
+                    // Fast ACK back to sender immediately
+                    if (typeof ack === "function") {
+                        ack({ success: true, message: payload })
+                    }
+
                     // Only emit to receiver if they haven't blocked the sender
                     if (!otherUserBlockedMe) {
-                        if (conversation.status === 'accepted') {
-                            this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
-                        } else if (conversation.status === 'pending') {
+                        this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
+                        if (conversation.status === 'pending') {
                             this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.NEW_REQUEST, {
                                 conversationId: conversation.id,
                                 senderId: senderId,
@@ -219,11 +221,14 @@ class SocketServer {
                         }
                     }
 
-                    // Always emit back to sender so they see their own message
+                    // Always emit back to sender so other tabs/devices or standard listeners see it
                     socket.emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload)
 
                 } catch (error) {
                     console.log(error);
+                    if (typeof ack === "function") {
+                        ack({ success: false, error: "Failed to send message" })
+                    }
                 }
             })
 
@@ -331,11 +336,12 @@ class SocketServer {
                 }
             })
 
-            socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any }) => {
+            socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any }, ack?: (res: any) => void) => {
                 try {
                     const member = await this.groupMembersRepo.isMember(data.groupId, senderId)
 
                     if (!member) {
+                        if (typeof ack === "function") ack({ success: false, error: "You are not member of this group" })
                         return socket.emit(GROUP_EVENTS.ERROR, {
                             message: "You are not member of this group"
                         })
@@ -360,9 +366,15 @@ class SocketServer {
                         }
                     }
 
+                    // Fast ACK back to sender immediately
+                    if (typeof ack === "function") {
+                        ack({ success: true, message: payload })
+                    }
+
                     this.io.to(`group_${data.groupId}`).emit(GROUP_EVENTS.RECEIVE_MESSAGE, payload)
                 } catch (error) {
                     console.error("[GROUP] send_message error:", error)
+                    if (typeof ack === "function") ack({ success: false, error: "Failed to send message" })
                     socket.emit(GROUP_EVENTS.ERROR, { message: "Failed to send message" })
                 }
             })
