@@ -58,6 +58,8 @@ class SocketServer {
                 origin: true,
                 credentials: true,
             },
+            pingInterval: 10000,
+            pingTimeout: 5000,
         });
 
         this.io.use(async (socket, next) => {
@@ -701,6 +703,14 @@ class SocketServer {
                 const userSockets = this.connectedUsers.get(senderId);
                 if (userSockets) {
                     userSockets.delete(socket.id);
+                    // Prune any sockets that are no longer actively connected
+                    for (const sId of userSockets) {
+                        const s = this.io.sockets?.sockets?.get(sId);
+                        if (!s || !s.connected) {
+                            userSockets.delete(sId);
+                        }
+                    }
+
                     if (userSockets.size === 0) {
                         this.connectedUsers.delete(senderId);
                         const now = new Date();
@@ -716,6 +726,7 @@ class SocketServer {
                             });
                         } else if (privacy === 'contacts') {
                             const contactUserIds = await this.conversationRepo.getContactUserIds(senderId);
+                            const contactSet = new Set(contactUserIds);
                             contactUserIds.forEach((contactId) => {
                                 this.io.to(`user_${contactId}`).emit(CHAT_EVENTS.USER_STATUS, {
                                     userId: senderId,
@@ -723,12 +734,16 @@ class SocketServer {
                                     lastSeen: now.toISOString(),
                                 });
                             });
-                            // Emit isOnline: false with lastSeen: null to everyone else so non-contacts clear any active indicator
-                            this.io.emit(CHAT_EVENTS.USER_STATUS, {
-                                userId: senderId,
-                                isOnline: false,
-                                lastSeen: null,
-                            });
+                            // Emit isOnline: false with lastSeen: null ONLY to non-contacts so contacts keep their lastSeen timestamp
+                            for (const otherUid of this.connectedUsers.keys()) {
+                                if (otherUid !== senderId && !contactSet.has(otherUid)) {
+                                    this.io.to(`user_${otherUid}`).emit(CHAT_EVENTS.USER_STATUS, {
+                                        userId: senderId,
+                                        isOnline: false,
+                                        lastSeen: null,
+                                    });
+                                }
+                            }
                         } else {
                             this.io.emit(CHAT_EVENTS.USER_STATUS, {
                                 userId: senderId,
