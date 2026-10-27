@@ -178,9 +178,9 @@ class UserRepository extends BaseRepository<User> {
             id: { [Op.ne]: userId }
         }
 
-        const isContactSql = `(SELECT sender_id FROM conversations WHERE receiver_id = ${userId} AND deleted_at IS NULL
+        const isContactSql = `(SELECT sender_id FROM conversations WHERE receiver_id = ${userId} AND status = 'accepted' AND deleted_at IS NULL
                                UNION 
-                               SELECT receiver_id FROM conversations WHERE sender_id = ${userId} AND deleted_at IS NULL)`
+                               SELECT receiver_id FROM conversations WHERE sender_id = ${userId} AND status = 'accepted' AND deleted_at IS NULL)`
 
         if (search) {
             whereClause[Op.and] = [
@@ -231,14 +231,30 @@ class UserRepository extends BaseRepository<User> {
             order: [["name", "ASC"]],
         })
 
-        // Mask avatar and last_seen if privacy is set to 'nobody'
+        // Fetch user's accepted contacts to enforce 'contacts' privacy
+        const acceptedConvs = await Conversation.findAll({
+            where: {
+                status: 'accepted',
+                deleted_at: null,
+                [Op.or]: [
+                    { sender_id: userId },
+                    { receiver_id: userId }
+                ]
+            },
+            attributes: ['sender_id', 'receiver_id']
+        })
+        const contactIdsSet = new Set(acceptedConvs.map(c => c.sender_id === userId ? c.receiver_id : c.sender_id))
+
+        // Mask avatar and last_seen if privacy is set to 'nobody' or 'contacts' (when not a contact)
         const sanitizedRows = rows.map((user) => {
             const u = user.toJSON() as any
-            if (u.last_seen_privacy === "nobody") {
+            const isContact = contactIdsSet.has(u.id)
+
+            if (u.last_seen_privacy === "nobody" || (u.last_seen_privacy === "contacts" && !isContact)) {
                 u.is_online = false
                 u.last_seen = null
             }
-            if (u.avatar_privacy === "nobody") {
+            if (u.avatar_privacy === "nobody" || (u.avatar_privacy === "contacts" && !isContact)) {
                 u.avatar = null
             }
             return u

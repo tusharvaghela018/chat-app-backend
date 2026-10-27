@@ -39,14 +39,29 @@ class ConversationController {
         
         if (!conversation) return sendResponse({ res, data: null });
 
-        // Sanitize to hide 'they blocked me' info
+        // Sanitize to hide 'they blocked me' info and apply privacy rules
         const plain = conversation.toJSON() as any
         const isSender = plain.sender_id === senderId
         
+        const isContact = plain.status === 'accepted';
+        const sanitizeParticipant = (u: any) => {
+            if (!u) return u;
+            if (u.last_seen_privacy === "nobody" || (u.last_seen_privacy === "contacts" && !isContact)) {
+                u.is_online = false;
+                u.last_seen = null;
+            }
+            if (u.avatar_privacy === "nobody" || (u.avatar_privacy === "contacts" && !isContact)) {
+                u.avatar = null;
+            }
+            return u;
+        };
+
         const sanitized = {
             ...plain,
             blocked_by_sender: isSender ? plain.blocked_by_sender : false,
-            blocked_by_receiver: !isSender ? plain.blocked_by_receiver : false
+            blocked_by_receiver: !isSender ? plain.blocked_by_receiver : false,
+            sender: sanitizeParticipant(plain.sender),
+            receiver: sanitizeParticipant(plain.receiver),
         }
 
         return sendResponse({ res, data: sanitized });

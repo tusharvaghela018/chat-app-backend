@@ -9,13 +9,43 @@ class ConversationRepository extends BaseRepository<Conversation> {
         super(Conversation);
     }
 
+    readonly getContactUserIds = async (userId: number): Promise<number[]> => {
+        const conversations = await Conversation.findAll({
+            where: {
+                status: 'accepted',
+                [Op.or]: [
+                    { sender_id: userId },
+                    { receiver_id: userId }
+                ]
+            },
+            attributes: ['sender_id', 'receiver_id']
+        })
+
+        return conversations.map(c => c.sender_id === userId ? c.receiver_id : c.sender_id)
+    }
+
     readonly findExistingConversation = async ({ senderId, receiverId }: { senderId: number, receiverId: number }) => {
+        const userAttributes = ['id', 'name', 'username', 'avatar', 'is_online', 'last_seen', 'last_seen_privacy', 'avatar_privacy', 'public_key'];
+        const includeUsers = [
+            {
+                model: User,
+                as: 'sender',
+                attributes: userAttributes
+            },
+            {
+                model: User,
+                as: 'receiver',
+                attributes: userAttributes
+            }
+        ];
+
         let conversation = await this.findOne(
             {
                 where: {
                     sender_id: senderId,
                     receiver_id: receiverId
-                }
+                },
+                include: includeUsers
             }
         )
 
@@ -25,7 +55,8 @@ class ConversationRepository extends BaseRepository<Conversation> {
                     where: {
                         sender_id: receiverId,
                         receiver_id: senderId
-                    }
+                    },
+                    include: includeUsers
                 }
             )
         }
@@ -144,13 +175,14 @@ class ConversationRepository extends BaseRepository<Conversation> {
             order: [['updated_at', 'DESC']]
         })
 
-        const sanitizeUser = (u: any) => {
+        const sanitizeUser = (u: any, convStatus?: string) => {
             if (!u) return u
-            if (u.last_seen_privacy === "nobody") {
+            const isContact = convStatus === 'accepted'
+            if (u.last_seen_privacy === "nobody" || (u.last_seen_privacy === "contacts" && !isContact)) {
                 u.is_online = false
                 u.last_seen = null
             }
-            if (u.avatar_privacy === "nobody") {
+            if (u.avatar_privacy === "nobody" || (u.avatar_privacy === "contacts" && !isContact)) {
                 u.avatar = null
             }
             return u
@@ -172,8 +204,8 @@ class ConversationRepository extends BaseRepository<Conversation> {
             const plainConv = conv.toJSON() as any
             plainConv.messages = lastMessage ? [lastMessage] : []
             plainConv.is_archived = isSender ? plainConv.archived_by_sender : plainConv.archived_by_receiver
-            plainConv.sender = sanitizeUser(plainConv.sender)
-            plainConv.receiver = sanitizeUser(plainConv.receiver)
+            plainConv.sender = sanitizeUser(plainConv.sender, plainConv.status)
+            plainConv.receiver = sanitizeUser(plainConv.receiver, plainConv.status)
             return plainConv
         }))
 

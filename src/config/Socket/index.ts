@@ -110,29 +110,46 @@ class SocketServer {
             this.connectedUsers.set(senderId, userSockets);
 
             this.userPrivacyMap.set(senderId, {
-                last_seen_privacy: socket.data.user?.last_seen_privacy || 'everyone',
+                last_seen_privacy: socket.data.user?.last_seen_privacy || 'contacts',
                 read_receipts: socket.data.user?.read_receipts !== false,
-                avatar_privacy: socket.data.user?.avatar_privacy || 'everyone'
+                avatar_privacy: socket.data.user?.avatar_privacy || 'contacts'
             });
 
-            const currentPrivacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy;
+            const currentPrivacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy || 'contacts';
 
             if (wasOffline) {
                 User.update({ is_online: true }, { where: { id: senderId } }).catch(err => {
                     console.error("Failed to update user is_online=true", err);
                 });
-                if (currentPrivacy !== 'nobody') {
+                if (currentPrivacy === 'everyone') {
                     this.io.emit(CHAT_EVENTS.USER_STATUS, {
                         userId: senderId,
                         isOnline: true,
                         lastSeen: null,
                     });
+                } else if (currentPrivacy === 'contacts') {
+                    this.conversationRepo.getContactUserIds(senderId).then(contactIds => {
+                        contactIds.forEach(cId => {
+                            this.io.to(`user_${cId}`).emit(CHAT_EVENTS.USER_STATUS, {
+                                userId: senderId,
+                                isOnline: true,
+                                lastSeen: null,
+                            });
+                        });
+                    }).catch(console.error);
                 }
             }
 
-            // Emit current list of online user IDs to the connected client (filter out users with last_seen_privacy === 'nobody')
+            // Emit current list of online user IDs to the connected client, respecting privacy settings
+            const myContacts = await this.conversationRepo.getContactUserIds(senderId);
+            const myContactsSet = new Set(myContacts);
+
             const visibleOnlineIds = Array.from(this.connectedUsers.keys()).filter((uid) => {
-                return this.userPrivacyMap.get(uid)?.last_seen_privacy !== 'nobody';
+                if (uid === senderId) return true;
+                const privacy = this.userPrivacyMap.get(uid)?.last_seen_privacy || 'contacts';
+                if (privacy === 'everyone') return true;
+                if (privacy === 'nobody') return false;
+                return myContactsSet.has(uid);
             });
             socket.emit(CHAT_EVENTS.ONLINE_USERS, visibleOnlineIds);
 
@@ -690,12 +707,27 @@ class SocketServer {
                         User.update({ is_online: false, last_seen: now }, { where: { id: senderId } }).catch(err => {
                             console.error("Failed to update user is_online=false", err);
                         });
-                        const privacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy;
-                        if (privacy !== 'nobody') {
+                        const privacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy || 'contacts';
+                        if (privacy === 'everyone') {
                             this.io.emit(CHAT_EVENTS.USER_STATUS, {
                                 userId: senderId,
                                 isOnline: false,
                                 lastSeen: now.toISOString(),
+                            });
+                        } else if (privacy === 'contacts') {
+                            const contactUserIds = await this.conversationRepo.getContactUserIds(senderId);
+                            contactUserIds.forEach((contactId) => {
+                                this.io.to(`user_${contactId}`).emit(CHAT_EVENTS.USER_STATUS, {
+                                    userId: senderId,
+                                    isOnline: false,
+                                    lastSeen: now.toISOString(),
+                                });
+                            });
+                            // Emit isOnline: false with lastSeen: null to everyone else so non-contacts clear any active indicator
+                            this.io.emit(CHAT_EVENTS.USER_STATUS, {
+                                userId: senderId,
+                                isOnline: false,
+                                lastSeen: null,
                             });
                         } else {
                             this.io.emit(CHAT_EVENTS.USER_STATUS, {
@@ -735,7 +767,27 @@ class SocketServer {
                 isOnline: false,
                 lastSeen: null,
             });
-        } else if (settings.last_seen_privacy && userSocketIds && userSocketIds.size > 0) {
+        } else if (settings.last_seen_privacy === 'contacts' && userSocketIds && userSocketIds.size > 0) {
+            this.conversationRepo.getContactUserIds(userId).then(contactUserIds => {
+                const contactSet = new Set(contactUserIds);
+                contactUserIds.forEach(cId => {
+                    this.io?.to(`user_${cId}`).emit(CHAT_EVENTS.USER_STATUS, {
+                        userId,
+                        isOnline: true,
+                        lastSeen: null,
+                    });
+                });
+                for (const otherUid of this.connectedUsers.keys()) {
+                    if (otherUid !== userId && !contactSet.has(otherUid)) {
+                        this.io?.to(`user_${otherUid}`).emit(CHAT_EVENTS.USER_STATUS, {
+                            userId,
+                            isOnline: false,
+                            lastSeen: null,
+                        });
+                    }
+                }
+            }).catch(console.error);
+        } else if (settings.last_seen_privacy === 'everyone' && userSocketIds && userSocketIds.size > 0) {
             this.io?.emit(CHAT_EVENTS.USER_STATUS, {
                 userId,
                 isOnline: true,
@@ -797,6 +849,30 @@ class SocketServer {
         const payload = { conversationId, senderId, receiverId, status };
         this.io.to(`user_${senderId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, payload);
         this.io.to(`user_${receiverId}`).emit(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, payload);
+
+        // When conversation is accepted, both users become contacts and can see each other's presence
+        if (status === 'accepted') {
+            const senderSockets = this.connectedUsers.get(senderId);
+            const receiverSockets = this.connectedUsers.get(receiverId);
+
+            const senderPrivacy = this.userPrivacyMap.get(senderId)?.last_seen_privacy || 'contacts';
+            const receiverPrivacy = this.userPrivacyMap.get(receiverId)?.last_seen_privacy || 'contacts';
+
+            if (senderSockets && senderSockets.size > 0 && senderPrivacy !== 'nobody') {
+                this.io.to(`user_${receiverId}`).emit(CHAT_EVENTS.USER_STATUS, {
+                    userId: senderId,
+                    isOnline: true,
+                    lastSeen: null,
+                });
+            }
+            if (receiverSockets && receiverSockets.size > 0 && receiverPrivacy !== 'nobody') {
+                this.io.to(`user_${senderId}`).emit(CHAT_EVENTS.USER_STATUS, {
+                    userId: receiverId,
+                    isOnline: true,
+                    lastSeen: null,
+                });
+            }
+        }
     }
 
     public notifyConversationArchived(
