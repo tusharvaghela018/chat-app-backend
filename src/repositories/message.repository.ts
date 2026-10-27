@@ -14,12 +14,10 @@ class MessageRepository extends BaseRepository<Message> {
 
         const conversation = await Conversation.findOne({
             where: {
-                sender_id: {
-                    [Op.or]: [senderId, receiverId]
-                },
-                receiver_id: {
-                    [Op.or]: [senderId, receiverId]
-                }
+                [Op.or]: [
+                    { sender_id: senderId, receiver_id: receiverId },
+                    { sender_id: receiverId, receiver_id: senderId }
+                ]
             }
         })
 
