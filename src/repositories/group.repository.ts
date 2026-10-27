@@ -108,6 +108,26 @@ class GroupRepository extends BaseRepository<Group> {
                     [
                         literal(`(SELECT COUNT(*) FROM group_members WHERE group_members.group_id = "Group"."id" AND group_members.deleted_at IS NULL)`),
                         "member_count"
+                    ],
+                    [
+                        literal(`COALESCE((
+                            SELECT COUNT(*)
+                            FROM group_messages
+                            JOIN group_members ON group_members.group_id = "Group"."id" AND group_members.user_id = ${Number(userId)} AND group_members.deleted_at IS NULL
+                            WHERE group_messages.group_id = "Group"."id"
+                              AND group_messages.deleted_at IS NULL
+                              AND (group_messages.sender_id != ${Number(userId)} OR group_messages.sender_id IS NULL)
+                              AND (group_members.last_read_at IS NULL OR group_messages.created_at > group_members.last_read_at)
+                        ), 0)::int`),
+                        "unread_count"
+                    ],
+                    [
+                        literal(`(SELECT content FROM group_messages WHERE group_messages.group_id = "Group"."id" AND group_messages.deleted_at IS NULL ORDER BY created_at DESC LIMIT 1)`),
+                        "last_message_content"
+                    ],
+                    [
+                        literal(`(SELECT created_at FROM group_messages WHERE group_messages.group_id = "Group"."id" AND group_messages.deleted_at IS NULL ORDER BY created_at DESC LIMIT 1)`),
+                        "last_message_time"
                     ]
                 ]
             },

@@ -188,21 +188,32 @@ class ConversationRepository extends BaseRepository<Conversation> {
             return u
         }
 
-        // For each conversation, fetch the latest non-hidden message manually to avoid Sequelize include + limit bugs
+        // For each conversation, fetch the latest non-hidden message and unread count
         const convsWithMessages = await Promise.all(conversations.map(async (conv) => {
             const isSender = conv.sender_id === userId
             const filterField = isSender ? 'is_hidden_for_sender_id' : 'is_hidden_for_receiver_id'
 
-            const lastMessage = await Message.findOne({
-                where: {
-                    conversation_id: conv.id,
-                    [filterField]: false
-                },
-                order: [['created_at', 'DESC']]
-            })
+            const [lastMessage, unreadCount] = await Promise.all([
+                Message.findOne({
+                    where: {
+                        conversation_id: conv.id,
+                        [filterField]: false
+                    },
+                    order: [['created_at', 'DESC']]
+                }),
+                Message.count({
+                    where: {
+                        conversation_id: conv.id,
+                        sender_id: { [Op.ne]: userId },
+                        is_seen: false,
+                        [filterField]: false
+                    }
+                })
+            ])
 
             const plainConv = conv.toJSON() as any
             plainConv.messages = lastMessage ? [lastMessage] : []
+            plainConv.unread_count = unreadCount
             plainConv.is_archived = isSender ? plainConv.archived_by_sender : plainConv.archived_by_receiver
             plainConv.sender = sanitizeUser(plainConv.sender, plainConv.status)
             plainConv.receiver = sanitizeUser(plainConv.receiver, plainConv.status)
