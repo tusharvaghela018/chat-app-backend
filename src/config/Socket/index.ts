@@ -185,7 +185,7 @@ class SocketServer {
 
                     // If OTHER user has blocked ME, the message is hidden for THEM
                     const isHiddenForOther = otherUserBlockedMe
-                    
+
                     const message = await this.messageRepo.create({
                         conversation_id: conversation.id,
                         sender_id: senderId,
@@ -274,6 +274,12 @@ class SocketServer {
                     conversationId,
                     messageIds: updatedIds
                 });
+
+                // also notify reader socket so their badge updates in real-time
+                socket.emit(CHAT_EVENTS.MESSAGES_SEEN, {
+                    conversationId,
+                    messageIds: updatedIds
+                });
             });
 
 
@@ -282,7 +288,7 @@ class SocketServer {
                 if (!conversation) return
                 const isSender = conversation.sender_id === senderId
                 const otherBlockedMe = isSender ? conversation.blocked_by_receiver : conversation.blocked_by_sender
-                
+
                 if (!otherBlockedMe) {
                     this.io.to(`user_${data.receiverId}`).emit(CHAT_EVENTS.TYPING, {
                         senderId,
@@ -602,8 +608,8 @@ class SocketServer {
                     const finalStatus: "completed" | "missed" | "cancelled" = isAnswered
                         ? "completed"
                         : senderId === session.callerId
-                        ? "cancelled"
-                        : "missed";
+                            ? "cancelled"
+                            : "missed";
 
                     await this.callRepo.update(session.callRecordId, {
                         ended_at: endedAt,
@@ -681,8 +687,8 @@ class SocketServer {
                         const finalStatus: "completed" | "missed" | "cancelled" = isAnswered
                             ? "completed"
                             : senderId === session.callerId
-                            ? "cancelled"
-                            : "missed";
+                                ? "cancelled"
+                                : "missed";
 
                         await this.callRepo.update(session.callRecordId, {
                             ended_at: endedAt,
@@ -974,7 +980,7 @@ class SocketServer {
             await Conversation.update(
                 { updated_at: new Date() },
                 { where: { id: conversationId } }
-            ).catch(() => {});
+            ).catch(() => { });
 
             const { id, content, sender_id, created_at } = message.toJSON();
             const payload = {
