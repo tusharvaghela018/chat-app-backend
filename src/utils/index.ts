@@ -9,7 +9,7 @@ export const getAuthCookieOptions = (res?: Response): CookieOptions => {
     const forwardedProto = req?.headers?.["x-forwarded-proto"];
     const isForwardedHttps = typeof forwardedProto === "string" && forwardedProto.includes("https");
 
-    const origin = (req?.headers?.origin || req?.headers?.referer || "") as string;
+    const origin = (req?.headers?.origin || "") as string;
     const isOriginHttps = typeof origin === "string" && origin.startsWith("https://");
 
     const host = (req?.headers?.host || "") as string;
@@ -39,7 +39,21 @@ export const setAuthCookie = (res: Response, token: string): void => {
 };
 
 export const clearAuthCookie = (res: Response): void => {
-    res.clearCookie("auth_token", getAuthCookieOptions(res));
+    const baseOptions = getAuthCookieOptions(res);
+    res.clearCookie("auth_token", baseOptions);
+    // Explicitly purge both partitioned and non-partitioned variants to wipe legacy duplicates
+    res.clearCookie("auth_token", {
+        ...baseOptions,
+        secure: true,
+        sameSite: "none",
+        partitioned: true
+    });
+    res.clearCookie("auth_token", {
+        ...baseOptions,
+        secure: false,
+        sameSite: "lax",
+        partitioned: false
+    });
 };
 
 export interface ISendResponseCookie {

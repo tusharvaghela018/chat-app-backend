@@ -1,7 +1,7 @@
 import { FRONTEND_URL } from "@/config";
 import User from "@/models/user.model";
 import UserRepository from "@/repositories/user.repository";
-import asyncHandler, { sendResponse, setAuthCookie } from "@/utils";
+import asyncHandler, { sendResponse } from "@/utils";
 import AppError from "@/utils/appError";
 import jwtUtil from "@/utils/jwt.util";
 import type { Request, Response } from "express";
@@ -88,7 +88,6 @@ class AuthController {
         }
 
         const token = jwtUtil.sign({ id: user.id, email: user.email });
-        setAuthCookie(res, token);
 
         res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
     });
