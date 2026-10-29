@@ -73,6 +73,14 @@ export default class Message extends Model<IMessage> implements IMessage {
     })
     is_hidden_for_receiver_id: boolean;
 
+    @ForeignKey(() => Message)
+    @Column({
+        field: "reply_to_id",
+        type: DataType.INTEGER,
+        allowNull: true,
+    })
+    reply_to_id?: number | null;
+
     // Who sent this message
     @BelongsTo(() => User, "sender_id")
     sender: User;
@@ -80,6 +88,10 @@ export default class Message extends Model<IMessage> implements IMessage {
     // Which conversation this message belongs to
     @BelongsTo(() => Conversation, "conversation_id")
     conversation: Conversation;
+
+    // Replying to another message
+    @BelongsTo(() => Message, "reply_to_id")
+    reply_to?: Message;
 
     @HasMany(() => MessageReaction, "message_id")
     reactions: MessageReaction[];

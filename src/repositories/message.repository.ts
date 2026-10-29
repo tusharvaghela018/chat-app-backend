@@ -2,6 +2,7 @@ import Conversation from "@/models/conversations.model";
 import Message from "@/models/message.model";
 import MessageReaction from "@/models/message-reaction.model";
 import StarredMessage from "@/models/starred-message.model";
+import User from "@/models/user.model";
 import BaseRepository from "@/repositories";
 import { Op } from "sequelize";
 
@@ -42,6 +43,18 @@ class MessageRepository extends BaseRepository<Message> {
             limit,
             order: [["id", "DESC"]],
             include: [
+                {
+                    model: Message,
+                    as: "reply_to",
+                    attributes: ["id", "content", "sender_id", "created_at"],
+                    include: [
+                        {
+                            model: User,
+                            as: "sender",
+                            attributes: ["id", "name"],
+                        }
+                    ]
+                },
                 {
                     model: MessageReaction,
                     as: "reactions",

@@ -36,6 +36,10 @@ export default class GroupMessage extends Model<IGroupMessage> implements IGroup
     @Column({ type: DataType.STRING(20), allowNull: false, defaultValue: "text" })
     type: "text" | "system";
 
+    @ForeignKey(() => GroupMessage)
+    @Column({ field: "reply_to_id", type: DataType.INTEGER, allowNull: true })
+    reply_to_id?: number | null;
+
     @Column({ type: DataType.JSONB, allowNull: true })
     encrypted_keys: any;
 
@@ -45,6 +49,9 @@ export default class GroupMessage extends Model<IGroupMessage> implements IGroup
 
     @BelongsTo(() => User, "sender_id")
     sender: User;
+
+    @BelongsTo(() => GroupMessage, "reply_to_id")
+    reply_to?: GroupMessage;
 
     @HasMany(() => GroupMessageSeen, "message_id")
     seenBy: GroupMessageSeen[];

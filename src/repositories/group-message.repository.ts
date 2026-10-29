@@ -16,15 +16,17 @@ class GroupMessageRepository extends BaseRepository<GroupMessage> {
         groupId: number,
         senderId: number,
         content: string,
-        encrypted_keys?: any
+        encrypted_keys?: any,
+        reply_to_id?: number | null
     ): Promise<GroupMessage> => {
         return await this.create({
             group_id: groupId,
             sender_id: senderId,
             content,
             type: "text",
-            encrypted_keys
-        })
+            encrypted_keys,
+            reply_to_id: reply_to_id || null,
+        } as any)
     }
 
     // ─── Create a system message (joined, left, name changed etc.) ───────────
@@ -59,6 +61,18 @@ class GroupMessageRepository extends BaseRepository<GroupMessage> {
             limit,
             order: [["created_at", "DESC"]], // latest first
             include: [
+                {
+                    model: GroupMessage,
+                    as: "reply_to",
+                    attributes: ["id", "content", "sender_id", "created_at"],
+                    include: [
+                        {
+                            model: User,
+                            as: "sender",
+                            attributes: ["id", "name"],
+                        }
+                    ]
+                },
                 {
                     model: User,
                     as: "sender",

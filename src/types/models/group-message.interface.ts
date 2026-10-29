@@ -4,6 +4,8 @@ export interface IGroupMessage {
     sender_id?: number
     content: string
     type?: "text" | "system"
+    reply_to_id?: number | null
+    reply_to?: any
     encrypted_keys?: any
     created_at?: Date
     updated_at?: Date

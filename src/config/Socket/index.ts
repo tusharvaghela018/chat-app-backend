@@ -165,7 +165,7 @@ class SocketServer {
                 console.log([...socket.rooms])
             }
 
-            socket.on(CHAT_EVENTS.SEND_MESSAGE, async (data: { receiverId: number, content: string }, ack?: (res: any) => void) => {
+            socket.on(CHAT_EVENTS.SEND_MESSAGE, async (data: { receiverId: number, content: string, reply_to_id?: number | null }, ack?: (res: any) => void) => {
                 try {
                     const conversation = await this.conversationRepo.getConversation({ senderId: senderId, receiverId: data.receiverId })
 
@@ -190,9 +190,35 @@ class SocketServer {
                         conversation_id: conversation.id,
                         sender_id: senderId,
                         content: data.content,
+                        reply_to_id: data.reply_to_id || null,
                         is_hidden_for_sender_id: isSenderInConv ? false : isHiddenForOther,
                         is_hidden_for_receiver_id: isReceiverInConv ? false : isHiddenForOther
                     })
+
+                    let reply_to: any = null
+                    if (data.reply_to_id) {
+                        const repliedMsg = await this.messageRepo.findOne({
+                            where: { id: data.reply_to_id },
+                            attributes: ['id', 'content', 'sender_id', 'created_at'],
+                            include: [{
+                                model: User,
+                                as: 'sender',
+                                attributes: ['id', 'name'],
+                            }]
+                        })
+                        if (repliedMsg) {
+                            reply_to = {
+                                id: repliedMsg.id,
+                                content: repliedMsg.content,
+                                sender_id: repliedMsg.sender_id,
+                                created_at: repliedMsg.created_at,
+                                sender: {
+                                    id: (repliedMsg as any).sender?.id,
+                                    name: (repliedMsg as any).sender?.name
+                                }
+                            }
+                        }
+                    }
 
                     const { id, content, conversation_id, sender_id: msg_sender_id, created_at } = message.toJSON()
 
@@ -202,6 +228,8 @@ class SocketServer {
                         sender_id: msg_sender_id,
                         receiver_id: data.receiverId,
                         conversation_id,
+                        reply_to_id: data.reply_to_id || null,
+                        reply_to,
                         created_at
                     }
 
@@ -342,7 +370,7 @@ class SocketServer {
                 }
             })
 
-            socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any }, ack?: (res: any) => void) => {
+            socket.on(GROUP_EVENTS.SEND_MESSAGE, async (data: { groupId: number; content: string; encrypted_keys?: any; reply_to_id?: number | null }, ack?: (res: any) => void) => {
                 try {
                     const member = await this.groupMembersRepo.isMember(data.groupId, senderId)
 
@@ -353,7 +381,32 @@ class SocketServer {
                         })
                     }
 
-                    const message = await this.groupMessageRepo.createMessage(data.groupId, senderId, data.content, data.encrypted_keys)
+                    const message = await this.groupMessageRepo.createMessage(data.groupId, senderId, data.content, data.encrypted_keys, data.reply_to_id)
+
+                    let reply_to: any = null
+                    if (data.reply_to_id) {
+                        const repliedMsg = await this.groupMessageRepo.findOne({
+                            where: { id: data.reply_to_id },
+                            attributes: ['id', 'content', 'sender_id', 'created_at'],
+                            include: [{
+                                model: User,
+                                as: 'sender',
+                                attributes: ['id', 'name'],
+                            }]
+                        })
+                        if (repliedMsg) {
+                            reply_to = {
+                                id: repliedMsg.id,
+                                content: repliedMsg.content,
+                                sender_id: repliedMsg.sender_id,
+                                created_at: repliedMsg.created_at,
+                                sender: {
+                                    id: (repliedMsg as any).sender?.id,
+                                    name: (repliedMsg as any).sender?.name
+                                }
+                            }
+                        }
+                    }
 
                     const { id, group_id, sender_id, content, type, encrypted_keys, created_at } = message.toJSON()
 
@@ -364,6 +417,8 @@ class SocketServer {
                         content,
                         type,
                         encrypted_keys,
+                        reply_to_id: data.reply_to_id || null,
+                        reply_to,
                         created_at,
                         sender: {
                             id: socket.data.user.id,
