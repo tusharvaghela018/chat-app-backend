@@ -474,7 +474,7 @@ class SocketServer {
             })
 
             // ── WebRTC 1-on-1 Calling ───────────────────────────────────────────
-            socket.on(CALL_EVENTS.INITIATE, async (data: { recipientId: number; isVideo: boolean; conversationId?: number; callerInfo?: any }) => {
+            socket.on(CALL_EVENTS.INITIATE, async (data: { recipientId: number; isVideo: boolean; conversationId?: number; callerInfo?: any; sdp?: any }) => {
                 try {
                     const recipientId = Number(data.recipientId);
                     const targetSockets = this.connectedUsers.get(recipientId);
@@ -574,6 +574,7 @@ class SocketServer {
                         callerId: senderId,
                         isVideo: !!data.isVideo,
                         conversationId: data.conversationId,
+                        sdp: data.sdp || null,
                         callerInfo: data.callerInfo || {
                             id: socket.data.user.id,
                             name: socket.data.user.name,
@@ -587,7 +588,7 @@ class SocketServer {
                 }
             });
 
-            socket.on(CALL_EVENTS.ACCEPT, async (data: { callerId: number }) => {
+            socket.on(CALL_EVENTS.ACCEPT, async (data: { callerId: number; sdp?: any }) => {
                 const callerId = Number(data.callerId);
                 const callerSession = this.activeCalls.get(callerId);
 
@@ -611,7 +612,7 @@ class SocketServer {
                     });
                 }
 
-                this.io.to(`user_${callerId}`).emit(CALL_EVENTS.ACCEPTED, { recipientId: senderId });
+                this.io.to(`user_${callerId}`).emit(CALL_EVENTS.ACCEPTED, { recipientId: senderId, sdp: data.sdp || null });
             });
 
             socket.on(CALL_EVENTS.REJECT, async (data: { callerId: number; reason?: string }) => {
