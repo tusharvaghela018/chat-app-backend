@@ -9,6 +9,9 @@ import type { Request, Response } from "express";
 import emailService from "@/services/email.service";
 import TwoFactorService from "@/services/2fa.service";
 import bcrypt from "bcrypt";
+import userSessionRepository from "@/repositories/user-session.repository";
+import { extractDeviceInfo } from "@/utils/device.util";
+import SocketServer from "@/config/Socket";
 
 class AuthController {
     private userRepo: UserRepository
@@ -34,7 +37,7 @@ class AuthController {
     });
 
     public login = asyncHandler(async (req: Request, res: Response) => {
-        const { user, token, requires2FA } = await this.userRepo.login(req.body)
+        const { user, token, requires2FA } = await this.userRepo.login(req.body);
 
         if (requires2FA) {
             return sendResponse({
@@ -42,39 +45,47 @@ class AuthController {
                 message: "2FA required",
                 data: { token, requires_2fa: true },
                 show_toast: false
-            })
+            });
         }
+
+        const deviceInfo = extractDeviceInfo(req);
+        const session = await userSessionRepository.createSession((user as any).id, deviceInfo);
+        const authToken = jwtUtil.sign({ id: (user as any).id, email: (user as any).email, sessionId: session.id });
 
         return sendResponse({
             res,
             message: "Logged in successfully",
             data: { user },
-            auth_token: token,
+            auth_token: authToken,
             show_toast: true
         });
     });
 
     public register = asyncHandler(async (req: Request, res: Response) => {
-        const { user, token } = await this.userRepo.register(req.body)
+        const { user } = await this.userRepo.register(req.body);
+
+        const deviceInfo = extractDeviceInfo(req);
+        const session = await userSessionRepository.createSession((user as any).id, deviceInfo);
+        const authToken = jwtUtil.sign({ id: (user as any).id, email: (user as any).email, sessionId: session.id });
 
         return sendResponse({
             res,
             data: { user },
             message: "Signup successfully",
-            auth_token: token,
+            auth_token: authToken,
             show_toast: true
         });
-    })
+    });
 
     public forgotPassword = asyncHandler(async (req: Request, res: Response) => {
         await this.userRepo.forgotPassword(req.body)
         return sendResponse({ res, message: "Password reset link sent to your email", show_toast: true })
-    })
+    });
 
     public resetPassword = asyncHandler(async (req: Request, res: Response) => {
         await this.userRepo.resetPassword(req.body)
         return sendResponse({ res, message: "Password reset successfully", show_toast: true })
-    })
+    });
 
     public googleCallback = asyncHandler(async (req: Request, res: Response) => {
         const user = req.user as User;
@@ -87,7 +98,9 @@ class AuthController {
             return res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}&requires_2fa=true`);
         }
 
-        const token = jwtUtil.sign({ id: user.id, email: user.email });
+        const deviceInfo = extractDeviceInfo(req);
+        const session = await userSessionRepository.createSession(user.id, deviceInfo);
+        const token = jwtUtil.sign({ id: user.id, email: user.email, sessionId: session.id });
 
         res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
     });
@@ -154,8 +167,10 @@ class AuthController {
                 throw new AppError("Invalid verification code", 401);
             }
 
-            // 4. Issue Final Access Token
-            const accessToken = jwtUtil.sign({ id: user.id, email: user.email });
+            // 4. Issue Final Access Token with Session
+            const deviceInfo = extractDeviceInfo(req);
+            const session = await userSessionRepository.createSession(user.id, deviceInfo);
+            const accessToken = jwtUtil.sign({ id: user.id, email: user.email, sessionId: session.id });
 
             return sendResponse({
                 res,
@@ -339,6 +354,13 @@ class AuthController {
         const user = await this.userRepo.findById(decoded.id);
         if (!user) throw new AppError("User not found", 404);
 
+        if (decoded.sessionId) {
+            const session = await userSessionRepository.findById(decoded.sessionId);
+            if (!session || session.is_revoked) {
+                throw new AppError("Session is revoked or expired", 401);
+            }
+        }
+
         return sendResponse({
             res,
             data: { user: (this.userRepo as any).sanitize(user) },
@@ -349,11 +371,100 @@ class AuthController {
     });
 
     public logout = asyncHandler(async (req: Request, res: Response) => {
+        const user = req.user as any;
+        if (user?.id && user?.sessionId) {
+            await userSessionRepository.revokeSession(user.id, user.sessionId);
+            SocketServer.getInstance().revokeSessionSockets(user.sessionId);
+        }
+
         return sendResponse({
             res,
             message: "Logged out successfully",
             data: null,
             clearAuthToken: true,
+            show_toast: true
+        });
+    });
+
+    public getSessions = asyncHandler(async (req: Request, res: Response) => {
+        const user = req.user as any;
+        const currentSessionId = user?.sessionId || null;
+        const sessions = await userSessionRepository.getActiveSessions(user.id);
+
+        const formatted = sessions.map(s => ({
+            id: s.id,
+            device_type: s.device_type,
+            device_name: s.device_name,
+            browser: s.browser,
+            os: s.os,
+            ip_address: s.ip_address,
+            location: s.location || "Unknown Location",
+            city: s.city,
+            region: s.region,
+            country: s.country,
+            country_code: s.country_code,
+            last_active_at: s.last_active_at,
+            created_at: s.created_at,
+            is_current: currentSessionId ? s.id === currentSessionId : false,
+        }));
+
+        return sendResponse({
+            res,
+            message: "Sessions retrieved successfully",
+            data: {
+                sessions: formatted,
+                total: formatted.length,
+                current_session_id: currentSessionId
+            },
+            show_toast: false
+        });
+    });
+
+    public revokeSession = asyncHandler(async (req: Request, res: Response) => {
+        const user = req.user as any;
+        const rawId = req.params.id;
+        const sessionId = (Array.isArray(rawId) ? rawId[0] : rawId) as string;
+
+        if (!sessionId) {
+            throw new AppError("Session ID is required", 400);
+        }
+
+        const revoked = await userSessionRepository.revokeSession(user.id, sessionId);
+        if (!revoked) {
+            throw new AppError("Session not found or already revoked", 404);
+        }
+
+        // Real-time disconnect remote socket
+        SocketServer.getInstance().revokeSessionSockets(sessionId);
+
+        const isCurrent = user.sessionId === sessionId;
+
+        return sendResponse({
+            res,
+            message: isCurrent ? "Current session ended" : "Device logged out successfully",
+            data: { revoked: true, is_current: isCurrent },
+            clearAuthToken: isCurrent,
+            show_toast: true
+        });
+    });
+
+    public revokeOtherSessions = asyncHandler(async (req: Request, res: Response) => {
+        const user = req.user as any;
+        const currentSessionId = user?.sessionId;
+
+        if (!currentSessionId) {
+            throw new AppError("Current session ID not recognized", 400);
+        }
+
+        const count = await userSessionRepository.revokeAllOtherSessions(user.id, currentSessionId);
+
+        // Real-time disconnect all other remote sockets for this user
+        SocketServer.getInstance().revokeUserOtherSessions(user.id, currentSessionId);
+
+        return sendResponse({
+            res,
+            message: `Logged out of ${count} other device${count === 1 ? "" : "s"}`,
+            data: { revoked_count: count },
             show_toast: true
         });
     });

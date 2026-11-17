@@ -13,6 +13,7 @@ import GroupMemberRepository from "@/repositories/group-member.repository";
 import GroupMessageRepository from "@/repositories/group-message.repository";
 import starredMessageRepository from "@/repositories/starred-message.repository";
 import callRepository, { CallRepository } from "@/repositories/call.repository";
+import userSessionRepository from "@/repositories/user-session.repository";
 
 interface ActiveCallSession {
     peerId: number;
@@ -89,10 +90,18 @@ class SocketServer {
                 const user = await User.findByPk(payLoad.id)
                 if (!user) return next(new Error("User Not Found"))
 
+                if (payLoad.sessionId) {
+                    const session = await userSessionRepository.findById(payLoad.sessionId)
+                    if (!session || session.is_revoked) {
+                        return next(new Error("Session revoked or expired"))
+                    }
+                }
+
                 const plainUser = user.toJSON()
                 delete plainUser.password
 
                 socket.data.user = plainUser;
+                socket.data.sessionId = payLoad.sessionId || null;
                 next()
             } catch (error) {
                 next(error)
@@ -103,6 +112,9 @@ class SocketServer {
 
             const { id: senderId } = socket.data.user
             socket.join(`user_${senderId}`)
+            if (socket.data.sessionId) {
+                socket.join(`session_${socket.data.sessionId}`)
+            }
             console.log(`User connected UserId : ${senderId}`);
 
             // Track active socket connection for real-time online/offline status
@@ -1052,6 +1064,30 @@ class SocketServer {
             this.io.to(`user_${params.callerId}`).emit(CHAT_EVENTS.RECEIVE_MESSAGE, payload);
         } catch (err) {
             console.error("Failed to create call log in chat:", err);
+        }
+    }
+
+    public revokeSessionSockets(sessionId: string) {
+        if (!this.io) return;
+        this.io.to(`session_${sessionId}`).emit(CHAT_EVENTS.SESSION_REVOKED, {
+            message: "Your session has been logged out from another device."
+        });
+        this.io.in(`session_${sessionId}`).disconnectSockets(true);
+    }
+
+    public revokeUserOtherSessions(userId: number, currentSessionId?: string) {
+        if (!this.io) return;
+        const userSockets = this.connectedUsers.get(userId);
+        if (userSockets) {
+            for (const socketId of userSockets) {
+                const sock = this.io.sockets.sockets.get(socketId);
+                if (sock && (!currentSessionId || sock.data.sessionId !== currentSessionId)) {
+                    sock.emit(CHAT_EVENTS.SESSION_REVOKED, {
+                        message: "All other sessions have been logged out."
+                    });
+                    sock.disconnect(true);
+                }
+            }
         }
     }
 

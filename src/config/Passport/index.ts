@@ -5,6 +5,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { GOOGLE_CALLBACK_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, JWT_SECRET } from "@/config";
 import { IJwtPayload } from "@/types/models/user.interface";
 import UserRepository from "@/repositories/user.repository";
+import userSessionRepository from "@/repositories/user-session.repository";
 import { decryptToken } from "@/utils/encrypt";
 
 const parseCookieHeader = (cookieHeader?: string): Record<string, string> => {
@@ -54,16 +55,34 @@ class PassportConfig {
         passport.use(
             new JwtStrategy(options, async (payload: IJwtPayload, done) => {
                 try {
-                    const user = await this.userRepo.findById(payload.id)
+                    const user = await this.userRepo.findById(payload.id);
                     if (!user) {
-                        return done(null, false)
+                        return done(null, false);
                     }
-                    return done(null, user)
+
+                    if (payload.sessionId) {
+                        const session = await userSessionRepository.findById(payload.sessionId);
+                        if (!session || session.is_revoked) {
+                            return done(null, false);
+                        }
+
+                        // Attach sessionId to user for controllers & middlewares
+                        (user as any).sessionId = payload.sessionId;
+
+                        // Periodically update last_active_at (throttle to 2 minutes)
+                        const now = Date.now();
+                        const lastActive = new Date(session.last_active_at).getTime();
+                        if (now - lastActive > 2 * 60 * 1000) {
+                            userSessionRepository.touchSession(session.id).catch(() => {});
+                        }
+                    }
+
+                    return done(null, user);
                 } catch (error) {
-                    return done(error, false)
+                    return done(error, false);
                 }
             })
-        )
+        );
     }
 
     // ─── Google OAuth Strategy ────────────────────────────────────────

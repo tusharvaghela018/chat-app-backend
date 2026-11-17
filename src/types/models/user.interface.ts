@@ -29,5 +29,6 @@ export interface IUser {
 export interface IJwtPayload {
     id: number;
     email: string;
+    sessionId?: string;
     isPreAuth?: boolean;
 }

@@ -17,13 +17,24 @@ class UploadController {
                 .replace(/[^a-zA-Z0-9_-]/g, "_")
             const public_id = `${Date.now()}_${cleanName}`
 
+            const ext = (originalname || "").toLowerCase().split(".").pop() || ""
+            const uploadOptions: Record<string, any> = {
+                folder: "chat-app/media",
+                resource_type: category === "image" ? "image" : category === "audio" ? "video" : "auto",
+                public_id,
+            }
+
+            // Only force download dialogs for static documents and PDFs; media (audio & image) should stream inline
+            if (category === "document" || category === "pdf") {
+                uploadOptions.flags = "attachment"
+            }
+
+            if (category === "audio" && ext) {
+                uploadOptions.format = ext
+            }
+
             const stream = cloudinary.uploader.upload_stream(
-                {
-                    folder: "chat-app/media",
-                    resource_type: category === "image" ? "image" : category === "audio" ? "video" : "auto",
-                    public_id,
-                    flags: "attachment",
-                },
+                uploadOptions,
                 (error, result) => {
                     if (error) return reject(error)
                     resolve(result)

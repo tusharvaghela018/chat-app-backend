@@ -25,7 +25,12 @@ class AuthRoute implements Routes {
         this.router.post(`${this.path}/forgot-password`, this.validationMiddleware.body(authValidation.forgotPassword), this.authController.forgotPassword);
         this.router.post(`${this.path}/reset-password`, this.validationMiddleware.body(authValidation.resetPassword), this.authController.resetPassword);
         this.router.post(`${this.path}/exchange`, this.authController.exchangeToken);
-        this.router.post(`${this.path}/logout`, this.authController.logout);
+        this.router.post(`${this.path}/logout`, this.authMiddleware.softAuthenticate, this.authController.logout);
+
+        // ─── Device & Session Management ──────────────────────────────────────
+        this.router.get(`${this.path}/sessions`, this.authMiddleware.authenticate, this.authController.getSessions);
+        this.router.delete(`${this.path}/sessions/other`, this.authMiddleware.authenticate, this.authController.revokeOtherSessions);
+        this.router.delete(`${this.path}/sessions/:id`, this.authMiddleware.authenticate, this.authController.revokeSession);
 
         // ─── Google OAuth ─────────────────────────────────────────────────────
         this.router.get(`${this.path}/google`, passport.authenticate("google", {
