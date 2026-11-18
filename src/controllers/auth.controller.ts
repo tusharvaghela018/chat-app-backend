@@ -399,7 +399,7 @@ class AuthController {
         const user = req.user as any;
         if (user?.id && user?.sessionId) {
             await userSessionRepository.revokeSession(user.id, user.sessionId);
-            SocketServer.getInstance().revokeSessionSockets(user.sessionId);
+            SocketServer.getInstance().revokeSessionSockets(user.sessionId, user.id);
         }
 
         return sendResponse({
@@ -460,7 +460,7 @@ class AuthController {
         }
 
         // Real-time disconnect remote socket
-        SocketServer.getInstance().revokeSessionSockets(sessionId);
+        SocketServer.getInstance().revokeSessionSockets(sessionId, user.id);
 
         const isCurrent = user.sessionId === sessionId;
 

@@ -1,8 +1,9 @@
 import BaseRepository from "@/repositories";
 import Conversation from "@/models/conversations.model";
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import User from "@/models/user.model";
 import Message from "@/models/message.model";
+import db from "@/models";
 
 class ConversationRepository extends BaseRepository<Conversation> {
     constructor() {
@@ -39,29 +40,15 @@ class ConversationRepository extends BaseRepository<Conversation> {
             }
         ];
 
-        let conversation = await this.findOne(
-            {
-                where: {
-                    sender_id: senderId,
-                    receiver_id: receiverId
-                },
-                include: includeUsers
-            }
-        )
-
-        if (!conversation) {
-            conversation = await this.findOne(
-                {
-                    where: {
-                        sender_id: receiverId,
-                        receiver_id: senderId
-                    },
-                    include: includeUsers
-                }
-            )
-        }
-
-        return conversation
+        return await this.findOne({
+            where: {
+                [Op.or]: [
+                    { sender_id: senderId, receiver_id: receiverId },
+                    { sender_id: receiverId, receiver_id: senderId }
+                ]
+            },
+            include: includeUsers
+        });
     }
 
     readonly getOrCreateConversation = async ({ senderId, receiverId }: { senderId: number, receiverId: number }) => {
@@ -88,8 +75,11 @@ class ConversationRepository extends BaseRepository<Conversation> {
 
         // If status is pending, verify that at least one message has been sent
         if (conversation.status === 'pending') {
-            const count = await Message.count({ where: { conversation_id: conversation.id } })
-            if (count === 0) {
+            const hasMessage = await Message.findOne({
+                where: { conversation_id: conversation.id },
+                attributes: ['id']
+            })
+            if (!hasMessage) {
                 return null
             }
         }
@@ -175,6 +165,73 @@ class ConversationRepository extends BaseRepository<Conversation> {
             order: [['updated_at', 'DESC']]
         })
 
+        if (!conversations || conversations.length === 0) {
+            return []
+        }
+
+        const convIds = conversations.map(c => c.id)
+        const senderConvIds = conversations.filter(c => c.sender_id === userId).map(c => c.id)
+        const receiverConvIds = conversations.filter(c => c.receiver_id === userId).map(c => c.id)
+
+        // Batch 1: Fetch the latest message for every conversation in a single query
+        const latestMessages: Message[] = await db.query(
+            `SELECT DISTINCT ON (m.conversation_id) m.*
+             FROM messages m
+             WHERE m.conversation_id IN (:convIds)
+               AND m.deleted_at IS NULL
+               AND (
+                 (m.conversation_id IN (:senderConvIds) AND m.is_hidden_for_sender_id = false)
+                 OR
+                 (m.conversation_id IN (:receiverConvIds) AND m.is_hidden_for_receiver_id = false)
+               )
+             ORDER BY m.conversation_id, m.id DESC`,
+            {
+                replacements: {
+                    convIds,
+                    senderConvIds: senderConvIds.length > 0 ? senderConvIds : [-1],
+                    receiverConvIds: receiverConvIds.length > 0 ? receiverConvIds : [-1],
+                },
+                type: QueryTypes.SELECT,
+                model: Message,
+                mapToModel: true,
+            }
+        )
+
+        const lastMessageMap = new Map<number, Message>()
+        for (const msg of latestMessages) {
+            lastMessageMap.set(msg.conversation_id, msg)
+        }
+
+        // Batch 2: Fetch unread counts for all conversations in a single grouped query
+        const unreadCountsRaw: Array<{ conversation_id: number; count: string | number }> = await db.query(
+            `SELECT m.conversation_id, COUNT(m.id)::int AS count
+             FROM messages m
+             WHERE m.conversation_id IN (:convIds)
+               AND m.sender_id != :userId
+               AND m.is_seen = false
+               AND m.deleted_at IS NULL
+               AND (
+                 (m.conversation_id IN (:senderConvIds) AND m.is_hidden_for_sender_id = false)
+                 OR
+                 (m.conversation_id IN (:receiverConvIds) AND m.is_hidden_for_receiver_id = false)
+               )
+             GROUP BY m.conversation_id`,
+            {
+                replacements: {
+                    convIds,
+                    userId,
+                    senderConvIds: senderConvIds.length > 0 ? senderConvIds : [-1],
+                    receiverConvIds: receiverConvIds.length > 0 ? receiverConvIds : [-1],
+                },
+                type: QueryTypes.SELECT,
+            }
+        )
+
+        const unreadMap = new Map<number, number>()
+        for (const row of unreadCountsRaw) {
+            unreadMap.set(Number(row.conversation_id), Number(row.count))
+        }
+
         const sanitizeUser = (u: any, convStatus?: string) => {
             if (!u) return u
             const isContact = convStatus === 'accepted'
@@ -188,37 +245,20 @@ class ConversationRepository extends BaseRepository<Conversation> {
             return u
         }
 
-        // For each conversation, fetch the latest non-hidden message and unread count
-        const convsWithMessages = await Promise.all(conversations.map(async (conv) => {
+        // Map cached messages and unread counts in memory
+        const convsWithMessages = conversations.map((conv) => {
             const isSender = conv.sender_id === userId
-            const filterField = isSender ? 'is_hidden_for_sender_id' : 'is_hidden_for_receiver_id'
-
-            const [lastMessage, unreadCount] = await Promise.all([
-                Message.findOne({
-                    where: {
-                        conversation_id: conv.id,
-                        [filterField]: false
-                    },
-                    order: [['created_at', 'DESC']]
-                }),
-                Message.count({
-                    where: {
-                        conversation_id: conv.id,
-                        sender_id: { [Op.ne]: userId },
-                        is_seen: false,
-                        [filterField]: false
-                    }
-                })
-            ])
-
             const plainConv = conv.toJSON() as any
+            const lastMessage = lastMessageMap.get(conv.id) || null
+            const unreadCount = unreadMap.get(conv.id) || 0
+
             plainConv.messages = lastMessage ? [lastMessage] : []
             plainConv.unread_count = unreadCount
             plainConv.is_archived = isSender ? plainConv.archived_by_sender : plainConv.archived_by_receiver
             plainConv.sender = sanitizeUser(plainConv.sender, plainConv.status)
             plainConv.receiver = sanitizeUser(plainConv.receiver, plainConv.status)
             return plainConv
-        }))
+        })
 
         // Omit empty pending conversations (conversations with status 'pending' that have 0 messages)
         return convsWithMessages.filter((c) => !(c.status === 'pending' && (!c.messages || c.messages.length === 0)))

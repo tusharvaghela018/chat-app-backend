@@ -1067,12 +1067,28 @@ class SocketServer {
         }
     }
 
-    public revokeSessionSockets(sessionId: string) {
+    public revokeSessionSockets(sessionId: string, userId?: number) {
         if (!this.io) return;
         this.io.to(`session_${sessionId}`).emit(CHAT_EVENTS.SESSION_REVOKED, {
             message: "Your session has been logged out from another device."
         });
         this.io.in(`session_${sessionId}`).disconnectSockets(true);
+
+        // Fallback: direct scan of user's active sockets for instant zero-latency disconnect
+        if (userId) {
+            const userSockets = this.connectedUsers.get(userId);
+            if (userSockets) {
+                for (const socketId of userSockets) {
+                    const sock = this.io.sockets.sockets.get(socketId);
+                    if (sock && sock.data.sessionId === sessionId) {
+                        sock.emit(CHAT_EVENTS.SESSION_REVOKED, {
+                            message: "Your session has been logged out from another device."
+                        });
+                        sock.disconnect(true);
+                    }
+                }
+            }
+        }
     }
 
     public revokeUserOtherSessions(userId: number, currentSessionId?: string) {
