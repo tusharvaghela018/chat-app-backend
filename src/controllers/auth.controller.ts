@@ -337,8 +337,11 @@ class AuthController {
     });
 
     public getSocketToken = asyncHandler(async (req: Request, res: Response) => {
-        const user = req.user as User;
-        const token = jwtUtil.sign({ id: user.id, email: user.email }, { expiresIn: "10m" });
+        const user = req.user as any;
+        const token = jwtUtil.sign(
+            { id: user.id, email: user.email, sessionId: user?.sessionId },
+            { expiresIn: "10m" }
+        );
         return sendResponse({
             res,
             data: { token },
