@@ -162,6 +162,9 @@ class App {
         try {
             await db.authenticate();
             console.info("Connected to DB successfully.");
+            // Ensure UserSession table exists on startup in all database environments
+            const UserSession = (await import("@/models/user-session.model")).default;
+            await UserSession.sync();
         } catch (error) {
             console.error("Failed to connect to DB", error);
         }

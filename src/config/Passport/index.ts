@@ -61,19 +61,25 @@ class PassportConfig {
                     }
 
                     if (payload.sessionId) {
-                        const session = await userSessionRepository.findById(payload.sessionId);
-                        if (!session || session.is_revoked) {
-                            return done(null, false);
-                        }
+                        try {
+                            const session = await userSessionRepository.findById(payload.sessionId);
+                            if (session && session.is_revoked) {
+                                return done(null, false);
+                            }
 
-                        // Attach sessionId to user for controllers & middlewares
-                        (user as any).sessionId = payload.sessionId;
+                            if (session) {
+                                // Attach sessionId to user for controllers & middlewares
+                                (user as any).sessionId = payload.sessionId;
 
-                        // Periodically update last_active_at (throttle to 2 minutes)
-                        const now = Date.now();
-                        const lastActive = new Date(session.last_active_at).getTime();
-                        if (now - lastActive > 2 * 60 * 1000) {
-                            userSessionRepository.touchSession(session.id).catch(() => {});
+                                // Periodically update last_active_at (throttle to 2 minutes)
+                                const now = Date.now();
+                                const lastActive = new Date(session.last_active_at).getTime();
+                                if (now - lastActive > 2 * 60 * 1000) {
+                                    userSessionRepository.touchSession(session.id).catch(() => {});
+                                }
+                            }
+                        } catch (sessionErr) {
+                            console.error("Session verification warning in Passport:", sessionErr);
                         }
                     }
 

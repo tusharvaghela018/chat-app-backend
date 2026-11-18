@@ -49,8 +49,19 @@ class AuthController {
         }
 
         const deviceInfo = extractDeviceInfo(req);
-        const session = await userSessionRepository.createSession((user as any).id, deviceInfo);
-        const authToken = jwtUtil.sign({ id: (user as any).id, email: (user as any).email, sessionId: session.id });
+        let sessionId: string | undefined;
+        try {
+            const session = await userSessionRepository.createSession((user as any).id, deviceInfo);
+            sessionId = session?.id;
+        } catch (sessionErr) {
+            console.error("Session creation warning on login:", sessionErr);
+        }
+
+        const authToken = jwtUtil.sign({
+            id: (user as any).id,
+            email: (user as any).email,
+            ...(sessionId ? { sessionId } : {})
+        });
 
         return sendResponse({
             res,
@@ -65,8 +76,19 @@ class AuthController {
         const { user } = await this.userRepo.register(req.body);
 
         const deviceInfo = extractDeviceInfo(req);
-        const session = await userSessionRepository.createSession((user as any).id, deviceInfo);
-        const authToken = jwtUtil.sign({ id: (user as any).id, email: (user as any).email, sessionId: session.id });
+        let sessionId: string | undefined;
+        try {
+            const session = await userSessionRepository.createSession((user as any).id, deviceInfo);
+            sessionId = session?.id;
+        } catch (sessionErr) {
+            console.error("Session creation warning on login:", sessionErr);
+        }
+
+        const authToken = jwtUtil.sign({
+            id: (user as any).id,
+            email: (user as any).email,
+            ...(sessionId ? { sessionId } : {})
+        });
 
         return sendResponse({
             res,
